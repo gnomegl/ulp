@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+# @describe Clean and deduplicate credential files by normalizing domains
+# @arg input-file! "Input file to process" [string]
+# @arg output-file! "Output file for cleaned results" [string]
+# @option -d --dupes-file "Output duplicate lines to this file (requires --dedupe)" [string]
+# @flag   -u --dedupe "Deduplicate lines"
+# @meta require-tools perl
+
+eval "$(argc --argc-eval "$0" "$@")"
+
+if [[ ! -f "$argc_input_file" ]]; then
+  echo "Error: Input file '$argc_input_file' not found" >&2
+  exit 1
+fi
+
+if [[ -n "$argc_dupes_file" && "$argc_dedupe" != 1 ]]; then
+  echo "Error: --dupes-file option requires --dedupe flag" >&2
+  exit 1
+fi
+
+if [[ "$argc_dedupe" == 1 ]]; then
+    if [[ -n "$argc_dupes_file" ]]; then
+      perl -ne '
+          next unless /[:|]/;
+          s/\|/:/g;
+          chomp;
+          s/\r//g;
+          s/\n//g;
+          $_ .= "\n";
+          if (s|^(?:https?://)?(?:www\.)?([^/]+)(?:/[^:]*)?:|$1:|) {
+              if ($seen{$_}++) {
+                  print STDERR $_
+              } else {
+                  print $_
+              }
+          }
+      ' "$argc_input_file" >"$argc_output_file" 2>"$argc_dupes_file"
+
+      echo "Cleaned file: $argc_output_file"
+      echo "Duplicate lines saved to: $argc_dupes_file"
+      echo "Total duplicates removed: $(wc -l <"$argc_dupes_file")"
+      echo "Lines not matching format were ignored"
+    else
+      perl -ne '
+          next unless /[:|]/;
+          s/\|/:/g;
+          chomp;
+          s/\r//g;
+          s/\n//g;
+          $_ .= "\n";
+          if (s|^(?:https?://)?(?:www\.)?([^/]+)(?:/[^:]*)?:|$1:|) {
+              print unless $seen{$_}++;
+          }
+      ' "$argc_input_file" >"$argc_output_file"
+
+      echo "Cleaned file: $argc_output_file"
+      echo "Duplicates removed (use --dupes-file to save duplicates to a file)"
+      echo "Lines not matching format were ignored"
+    fi
+  else
+    perl -ne '
+        next unless /[:|]/;
+        s/\|/:/g;
+        chomp;
+        s/\r//g;
+        s/\n//g;
+        $_ .= "\n";
+        print if s|^(?:https?://)?(?:www\.)?([^/]+)(?:/[^:]*)?:|$1:|;
+    ' "$argc_input_file" >"$argc_output_file"
+
+    echo "Cleaned file: $argc_output_file (no deduplication)"
+    echo "Lines not matching format were ignored"
+  fi
