@@ -1,0 +1,44 @@
+#!/bin/bash
+
+show_help() {
+  echo "Usage: $(basename "$0") <input_file> <output_file> [dupes_file]"
+  echo
+  echo "Arguments:"
+  echo "  input_file    Path to the input file"
+  echo "  output_file   Path to the output file"
+  echo "  dupes_file    Optional path to save duplicate entries"
+  echo
+  echo "Description:"
+  echo "  Cleans URLs in the input file by removing http(s):// and www. prefixes"
+  echo "  and removes duplicate entries."
+  exit 1
+}
+
+if [[ "$1" == "-h" || "$1" == "--help" || -z "$1" ]]; then
+  show_help
+fi
+
+input_file="$1"
+output_file="$2"
+dupes_file="$3"
+
+if [[ -z "$output_file" ]]; then
+  echo "Error: Missing output file argument."
+  show_help
+fi
+
+if [[ -n "$dupes_file" ]]; then
+    perl -ne '
+        s|^(?:https?://)?(?:www\.)?([^/]+)(?:/[^:]*)?:|$1:|;
+        if ($seen{$_}++) {
+            print STDERR $_
+        } else {
+            print $_
+        }
+    ' "$input_file" > "$output_file" 2> "$dupes_file"
+    echo "Duplicates saved to: $dupes_file ($(wc -l < "$dupes_file") lines)"
+else
+    perl -ne 's|^(?:https?://)?(?:www\.)?([^/]+)(?:/[^:]*)?:|$1:|; print unless $seen{$_}++' "$input_file" > "$output_file"
+fi
+
+echo "Cleaned file: $output_file"
