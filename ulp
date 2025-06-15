@@ -2,24 +2,29 @@
 
 input_file=""
 output_file=""
+dedupe=false
 show_dupes=false
 dupes_file=""
 
 usage() {
-  echo "Usage: $0 -i input_file -o output_file [-d dupes_file]"
+  echo "Usage: $0 -i input_file -o output_file [-u] [-d dupes_file]"
   echo "  -i: Input file"
   echo "  -o: Output file"
-  echo "  -d: Output duplicate lines to this file (optional)"
+  echo "  -u: Deduplicate lines (optional)"
+  echo "  -d: Output duplicate lines to this file (optional, requires -u)"
   exit 1
 }
 
-while getopts "i:o:d:h" opt; do
+while getopts "i:o:d:uh" opt; do
   case $opt in
   i)
     input_file="$OPTARG"
     ;;
   o)
     output_file="$OPTARG"
+    ;;
+  u)
+    dedupe=true
     ;;
   d)
     show_dupes=true
@@ -45,8 +50,14 @@ if [[ ! -f "$input_file" ]]; then
   exit 1
 fi
 
-if [[ "$show_dupes" == true ]]; then
-  perl -ne '
+if [[ "$show_dupes" == true && "$dedupe" != true ]]; then
+  echo "Error: -d option requires -u (deduplicate) option"
+  usage
+fi
+
+if [[ "$dedupe" == true ]]; then
+  if [[ "$show_dupes" == true ]]; then
+    perl -ne '
         s|^(?:https?://)?(?:www\.)?([^/]+)(?:/[^:]*)?:|$1:|;
         if ($seen{$_}++) {
             print STDERR $_
@@ -55,10 +66,15 @@ if [[ "$show_dupes" == true ]]; then
         }
     ' "$input_file" >"$output_file" 2>"$dupes_file"
 
-  echo "Cleaned file: $output_file"
-  echo "Duplicate lines saved to: $dupes_file"
-  echo "Total duplicates removed: $(wc -l <"$dupes_file")"
+    echo "Cleaned file: $output_file"
+    echo "Duplicate lines saved to: $dupes_file"
+    echo "Total duplicates removed: $(wc -l <"$dupes_file")"
+  else
+    perl -ne 's|^(?:https?://)?(?:www\.)?([^/]+)(?:/[^:]*)?:|$1:|; print unless $seen{$_}++' "$input_file" >"$output_file"
+    echo "Cleaned file: $output_file"
+    echo "Duplicates removed (use -d to save duplicates to a file)"
+  fi
 else
-  perl -ne 's|^(?:https?://)?(?:www\.)?([^/]+)(?:/[^:]*)?:|$1:|; print unless $seen{$_}++' "$input_file" >"$output_file"
-  echo "Cleaned file: $output_file"
+  perl -ne 's|^(?:https?://)?(?:www\.)?([^/]+)(?:/[^:]*)?:|$1:|; print' "$input_file" >"$output_file"
+  echo "Cleaned file: $output_file (no deduplication)"
 fi
