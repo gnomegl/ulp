@@ -1,44 +1,64 @@
 #!/bin/bash
 
-show_help() {
-  echo "Usage: $(basename "$0") <input_file> <output_file> [dupes_file]"
-  echo
-  echo "Arguments:"
-  echo "  input_file    Path to the input file"
-  echo "  output_file   Path to the output file"
-  echo "  dupes_file    Optional path to save duplicate entries"
-  echo
-  echo "Description:"
-  echo "  Cleans URLs in the input file by removing http(s):// and www. prefixes"
-  echo "  and removes duplicate entries."
+input_file=""
+output_file=""
+show_dupes=false
+dupes_file=""
+
+usage() {
+  echo "Usage: $0 -i input_file -o output_file [-d dupes_file]"
+  echo "  -i: Input file"
+  echo "  -o: Output file"
+  echo "  -d: Output duplicate lines to this file (optional)"
   exit 1
 }
 
-if [[ "$1" == "-h" || "$1" == "--help" || -z "$1" ]]; then
-  show_help
+while getopts "i:o:d:h" opt; do
+  case $opt in
+  i)
+    input_file="$OPTARG"
+    ;;
+  o)
+    output_file="$OPTARG"
+    ;;
+  d)
+    show_dupes=true
+    dupes_file="$OPTARG"
+    ;;
+  h)
+    usage
+    ;;
+  \?)
+    echo "Invalid option: -$OPTARG" >&2
+    usage
+    ;;
+  esac
+done
+
+if [[ -z "$input_file" || -z "$output_file" ]]; then
+  echo "Error: Input and output files are required"
+  usage
 fi
 
-input_file="$1"
-output_file="$2"
-dupes_file="$3"
-
-if [[ -z "$output_file" ]]; then
-  echo "Error: Missing output file argument."
-  show_help
+if [[ ! -f "$input_file" ]]; then
+  echo "Error: Input file '$input_file' not found"
+  exit 1
 fi
 
-if [[ -n "$dupes_file" ]]; then
-    perl -ne '
+if [[ "$show_dupes" == true ]]; then
+  perl -ne '
         s|^(?:https?://)?(?:www\.)?([^/]+)(?:/[^:]*)?:|$1:|;
         if ($seen{$_}++) {
             print STDERR $_
         } else {
             print $_
         }
-    ' "$input_file" > "$output_file" 2> "$dupes_file"
-    echo "Duplicates saved to: $dupes_file ($(wc -l < "$dupes_file") lines)"
-else
-    perl -ne 's|^(?:https?://)?(?:www\.)?([^/]+)(?:/[^:]*)?:|$1:|; print unless $seen{$_}++' "$input_file" > "$output_file"
-fi
+    ' "$input_file" >"$output_file" 2>"$dupes_file"
 
-echo "Cleaned file: $output_file"
+  echo "Cleaned file: $output_file"
+  echo "Duplicate lines saved to: $dupes_file"
+  echo "Total duplicates removed: $(wc -l <"$dupes_file")"
+else
+  perl -ne 's|^(?:https?://)?(?:www\.)?([^/]+)(?:/[^:]*)?:|$1:|; print unless $seen{$_}++' "$input_file" >"$output_file"
+  echo "Cleaned file: $output_file"
+fi
