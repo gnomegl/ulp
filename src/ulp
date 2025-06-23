@@ -256,9 +256,9 @@ jsonl() {
           if [[ -n "$file_name" ]]; then
             base_input=$(basename "$argc_input_file")
             if [[ "$file_name" == *"$base_input"* ]] || [[ "$base_input" == *"$(echo "$file_name" | sed 's/🔒 //' | sed 's/ - @.*//')"* ]]; then
-              channel_metadata["date"]=$(echo "$message" | jq -r '.raw.Date // empty' 2>/dev/null)
-              channel_metadata["message_content"]=$(echo "$message" | jq -r '.raw.Message // empty' 2>/dev/null)
-              channel_metadata["message_id"]=$(echo "$message" | jq -r '.raw.ID // empty' 2>/dev/null)
+              channel_metadata["date"]=$(echo "$message" | jq -r '.raw.Date // ""' 2>/dev/null)
+              channel_metadata["message_content"]=$(echo "$message" | jq -r '.raw.Message // ""' 2>/dev/null)
+              channel_metadata["message_id"]=$(echo "$message" | jq -r '.raw.ID // ""' 2>/dev/null)
 
               if [[ -n "${temp_file:-}" && -f "${temp_file:-}" ]]; then
                 rm -f "$temp_file"
@@ -307,7 +307,7 @@ jsonl() {
     # Export metadata as environment variables to avoid shell escaping issues
     export ULP_ORIGINAL_FILENAME="$original_filename"
     export ULP_NDJSON_BASE="$ndjson_base"
-    export ULP_CHANNEL_ID="${channel_metadata[id]:-}"
+    export ULP_CHANNEL_ID="$channel_id"
     export ULP_CHANNEL_NAME="$channel_name"
     export ULP_CHANNEL_AT="$channel_at"
     export ULP_POST_DATE="$post_date"
@@ -663,9 +663,9 @@ full() {
           if [[ -n "$file_name" ]]; then
             base_input=$(basename "$argc_input_file")
             if [[ "$file_name" == *"$base_input"* ]] || [[ "$base_input" == *"$(echo "$file_name" | sed 's/🔒 //' | sed 's/ - @.*//')"* ]]; then
-              channel_metadata["date"]=$(echo "$message" | jq -r '.raw.Date // empty' 2>/dev/null)
-              channel_metadata["message_content"]=$(echo "$message" | jq -r '.raw.Message // empty' 2>/dev/null)
-              channel_metadata["message_id"]=$(echo "$message" | jq -r '.raw.ID // empty' 2>/dev/null)
+              channel_metadata["date"]=$(echo "$message" | jq -r '.raw.Date // ""' 2>/dev/null)
+              channel_metadata["message_content"]=$(echo "$message" | jq -r '.raw.Message // ""' 2>/dev/null)
+              channel_metadata["message_id"]=$(echo "$message" | jq -r '.raw.ID // ""' 2>/dev/null)
 
               if [[ -n "${temp_file:-}" && -f "${temp_file:-}" ]]; then
                 rm -f "$temp_file"
@@ -711,7 +711,7 @@ full() {
     # Export metadata as environment variables
     export ULP_ORIGINAL_FILENAME="$original_filename"
     export ULP_NDJSON_BASE="$ndjson_base"
-    export ULP_CHANNEL_ID="${channel_metadata[id]:-}"
+    export ULP_CHANNEL_ID="$channel_id"
     export ULP_CHANNEL_NAME="$channel_name"
     export ULP_CHANNEL_AT="$channel_at"
     export ULP_POST_DATE="$post_date"
