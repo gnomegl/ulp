@@ -246,7 +246,7 @@ jsonl() {
         fi
       fi
 
-      channel_id=$(jq -r 'keys[0]' "$json_file" 2>/dev/null || echo "")
+      channel_id=$(jq -r 'to_entries[0].key' "$json_file" 2>/dev/null || echo "")
 
       if [[ -n "$channel_id" && "$channel_id" != "null" ]]; then
         channel_metadata["id"]=$channel_id
@@ -256,9 +256,9 @@ jsonl() {
           if [[ -n "$file_name" ]]; then
             base_input=$(basename "$argc_input_file")
             if [[ "$file_name" == *"$base_input"* ]] || [[ "$base_input" == *"$(echo "$file_name" | sed 's/🔒 //' | sed 's/ - @.*//')"* ]]; then
-              channel_metadata["date"]=$(echo "$message" | jq -r '.raw.Date // ""' 2>/dev/null)
+              channel_metadata["date"]=$(echo "$message" | jq -r '.date // ""' 2>/dev/null)
               channel_metadata["message_content"]=$(echo "$message" | jq -r '.raw.Message // ""' 2>/dev/null)
-              channel_metadata["message_id"]=$(echo "$message" | jq -r '.raw.ID // ""' 2>/dev/null)
+              channel_metadata["message_id"]=$(echo "$message" | jq -r '.id // ""' 2>/dev/null)
 
               if [[ -n "${temp_file:-}" && -f "${temp_file:-}" ]]; then
                 rm -f "$temp_file"
@@ -653,7 +653,7 @@ full() {
         fi
       fi
 
-      channel_id=$(jq -r 'keys[0]' "$json_file" 2>/dev/null || echo "")
+      channel_id=$(jq -r 'to_entries[0].key' "$json_file" 2>/dev/null || echo "")
 
       if [[ -n "$channel_id" && "$channel_id" != "null" ]]; then
         channel_metadata["id"]=$channel_id
@@ -663,9 +663,9 @@ full() {
           if [[ -n "$file_name" ]]; then
             base_input=$(basename "$argc_input_file")
             if [[ "$file_name" == *"$base_input"* ]] || [[ "$base_input" == *"$(echo "$file_name" | sed 's/🔒 //' | sed 's/ - @.*//')"* ]]; then
-              channel_metadata["date"]=$(echo "$message" | jq -r '.raw.Date // ""' 2>/dev/null)
+              channel_metadata["date"]=$(echo "$message" | jq -r '.date // ""' 2>/dev/null)
               channel_metadata["message_content"]=$(echo "$message" | jq -r '.raw.Message // ""' 2>/dev/null)
-              channel_metadata["message_id"]=$(echo "$message" | jq -r '.raw.ID // ""' 2>/dev/null)
+              channel_metadata["message_id"]=$(echo "$message" | jq -r '.id // ""' 2>/dev/null)
 
               if [[ -n "${temp_file:-}" && -f "${temp_file:-}" ]]; then
                 rm -f "$temp_file"
