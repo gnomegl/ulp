@@ -736,44 +736,9 @@ full() {
       fi
     fi
 
-    # Extract metadata for this specific file
-    local file_metadata_date=""
-    local file_metadata_content=""
-    local file_metadata_id=""
-    
-    if [[ -n "$argc_json_file" && -f "$argc_json_file" ]]; then
-      # First try fuzzy match by message ID in filename (more reliable for emoji issues)
-      if [[ "$original_filename" =~ ^[0-9]+_([0-9]+)_ ]]; then
-        local file_msg_id="${BASH_REMATCH[1]}"
-        
-        while IFS= read -r message; do
-          local json_msg_id=$(echo "$message" | jq -r '.id // ""' 2>/dev/null)
-          if [[ "$file_msg_id" == "$json_msg_id" ]]; then
-            file_metadata_date=$(echo "$message" | jq -r '.date // ""' 2>/dev/null)
-            file_metadata_content=$(echo "$message" | jq -r '.raw.Message // ""' 2>/dev/null)
-            file_metadata_id="$json_msg_id"
-            break
-          fi
-        done < <(jq -c '.messages[]' "$argc_json_file" 2>/dev/null)
-      fi
-      
-      # Fallback to exact filename match if message ID match failed
-      if [[ -z "$file_metadata_id" ]]; then
-        while IFS= read -r message; do
-          file_name=$(echo "$message" | jq -r '.file // empty' 2>/dev/null)
-          if [[ -n "$file_name" && "$file_name" == "$original_filename" ]]; then
-            file_metadata_date=$(echo "$message" | jq -r '.date // ""' 2>/dev/null)
-            file_metadata_content=$(echo "$message" | jq -r '.raw.Message // ""' 2>/dev/null)
-            file_metadata_id=$(echo "$message" | jq -r '.id // ""' 2>/dev/null)
-            break
-          fi
-        done < <(jq -c '.messages[]' "$argc_json_file" 2>/dev/null)
-      fi
-    fi
-
     local post_date=""
-    if [[ -n "$file_metadata_date" && "$file_metadata_date" != "null" ]]; then
-      post_date=$(date -d "@$file_metadata_date" -Iseconds 2>/dev/null || echo "$file_metadata_date")
+    if [[ -n "${channel_metadata[date]}" && "${channel_metadata[date]}" != "null" ]]; then
+      post_date=$(date -d "@${channel_metadata[date]}" -Iseconds 2>/dev/null || echo "${channel_metadata[date]}")
     fi
 
     echo "Processing file: $input_file" >&2
@@ -782,12 +747,12 @@ full() {
     # Export metadata as environment variables
     export ULP_ORIGINAL_FILENAME="$original_filename"
     export ULP_NDJSON_BASE="$ndjson_base"
-    export ULP_CHANNEL_ID="${channel_metadata[id]:-}"
+    export ULP_CHANNEL_ID="$channel_id"
     export ULP_CHANNEL_NAME="$channel_name"
     export ULP_CHANNEL_AT="$channel_at"
     export ULP_POST_DATE="$post_date"
-    export ULP_MESSAGE_CONTENT="$file_metadata_content"
-    export ULP_MESSAGE_ID="$file_metadata_id"
+    export ULP_MESSAGE_CONTENT="${channel_metadata[message_content]:-}"
+    export ULP_MESSAGE_ID="${channel_metadata[message_id]:-}"
 
     # Process file in 100MB chunks
     perl -ne '
