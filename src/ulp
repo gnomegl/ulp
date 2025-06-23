@@ -255,6 +255,7 @@ jsonl() {
           file_name=$(echo "$message" | jq -r '.file // empty' 2>/dev/null)
           if [[ -n "$file_name" ]]; then
             base_input=$(basename "$argc_input_file")
+            # Try exact match first
             if [[ "$file_name" == "$base_input" ]]; then
               channel_metadata["date"]=$(echo "$message" | jq -r '.date // ""' 2>/dev/null)
               channel_metadata["message_content"]=$(echo "$message" | jq -r '.raw.Message // ""' 2>/dev/null)
@@ -265,6 +266,21 @@ jsonl() {
               fi
 
               return 0
+            # Try fuzzy match for encoding issues - match by message ID in filename
+            elif [[ "$base_input" =~ ^[0-9]+_([0-9]+)_ ]]; then
+              local file_msg_id="${BASH_REMATCH[1]}"
+              local json_msg_id=$(echo "$message" | jq -r '.id // ""' 2>/dev/null)
+              if [[ "$file_msg_id" == "$json_msg_id" ]]; then
+                channel_metadata["date"]=$(echo "$message" | jq -r '.date // ""' 2>/dev/null)
+                channel_metadata["message_content"]=$(echo "$message" | jq -r '.raw.Message // ""' 2>/dev/null)
+                channel_metadata["message_id"]="$json_msg_id"
+
+                if [[ -n "${temp_file:-}" && -f "${temp_file:-}" ]]; then
+                  rm -f "$temp_file"
+                fi
+
+                return 0
+              fi
             fi
           fi
         done < <(jq -c '.messages[]' "$json_file" 2>/dev/null)
@@ -662,6 +678,7 @@ full() {
           file_name=$(echo "$message" | jq -r '.file // empty' 2>/dev/null)
           if [[ -n "$file_name" ]]; then
             base_input=$(basename "$argc_input_file")
+            # Try exact match first
             if [[ "$file_name" == "$base_input" ]]; then
               channel_metadata["date"]=$(echo "$message" | jq -r '.date // ""' 2>/dev/null)
               channel_metadata["message_content"]=$(echo "$message" | jq -r '.raw.Message // ""' 2>/dev/null)
@@ -672,6 +689,21 @@ full() {
               fi
 
               return 0
+            # Try fuzzy match for encoding issues - match by message ID in filename
+            elif [[ "$base_input" =~ ^[0-9]+_([0-9]+)_ ]]; then
+              local file_msg_id="${BASH_REMATCH[1]}"
+              local json_msg_id=$(echo "$message" | jq -r '.id // ""' 2>/dev/null)
+              if [[ "$file_msg_id" == "$json_msg_id" ]]; then
+                channel_metadata["date"]=$(echo "$message" | jq -r '.date // ""' 2>/dev/null)
+                channel_metadata["message_content"]=$(echo "$message" | jq -r '.raw.Message // ""' 2>/dev/null)
+                channel_metadata["message_id"]="$json_msg_id"
+
+                if [[ -n "${temp_file:-}" && -f "${temp_file:-}" ]]; then
+                  rm -f "$temp_file"
+                fi
+
+                return 0
+              fi
             fi
           fi
         done < <(jq -c '.messages[]' "$json_file" 2>/dev/null)
