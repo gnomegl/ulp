@@ -246,7 +246,7 @@ jsonl() {
         fi
       fi
 
-      channel_id=$(jq -r 'to_entries[0].key' "$json_file" 2>/dev/null || echo "")
+      channel_id=$(jq -r '.id' "$json_file" 2>/dev/null || echo "")
 
       if [[ -n "$channel_id" && "$channel_id" != "null" ]]; then
         channel_metadata["id"]=$channel_id
@@ -255,7 +255,7 @@ jsonl() {
           file_name=$(echo "$message" | jq -r '.file // empty' 2>/dev/null)
           if [[ -n "$file_name" ]]; then
             base_input=$(basename "$argc_input_file")
-            if [[ "$file_name" == *"$base_input"* ]] || [[ "$base_input" == *"$(echo "$file_name" | sed 's/🔒 //' | sed 's/ - @.*//')"* ]]; then
+            if [[ "$file_name" == "$base_input" ]]; then
               channel_metadata["date"]=$(echo "$message" | jq -r '.date // ""' 2>/dev/null)
               channel_metadata["message_content"]=$(echo "$message" | jq -r '.raw.Message // ""' 2>/dev/null)
               channel_metadata["message_id"]=$(echo "$message" | jq -r '.id // ""' 2>/dev/null)
@@ -267,7 +267,7 @@ jsonl() {
               return 0
             fi
           fi
-        done < <(jq -r '.[] | .messages[]? // empty' "$json_file" 2>/dev/null)
+        done < <(jq -c '.messages[]' "$json_file" 2>/dev/null)
 
         if [[ -n "${temp_file:-}" && -f "${temp_file:-}" ]]; then
           rm -f "$temp_file"
@@ -653,7 +653,7 @@ full() {
         fi
       fi
 
-      channel_id=$(jq -r 'to_entries[0].key' "$json_file" 2>/dev/null || echo "")
+      channel_id=$(jq -r '.id' "$json_file" 2>/dev/null || echo "")
 
       if [[ -n "$channel_id" && "$channel_id" != "null" ]]; then
         channel_metadata["id"]=$channel_id
@@ -662,7 +662,7 @@ full() {
           file_name=$(echo "$message" | jq -r '.file // empty' 2>/dev/null)
           if [[ -n "$file_name" ]]; then
             base_input=$(basename "$argc_input_file")
-            if [[ "$file_name" == *"$base_input"* ]] || [[ "$base_input" == *"$(echo "$file_name" | sed 's/🔒 //' | sed 's/ - @.*//')"* ]]; then
+            if [[ "$file_name" == "$base_input" ]]; then
               channel_metadata["date"]=$(echo "$message" | jq -r '.date // ""' 2>/dev/null)
               channel_metadata["message_content"]=$(echo "$message" | jq -r '.raw.Message // ""' 2>/dev/null)
               channel_metadata["message_id"]=$(echo "$message" | jq -r '.id // ""' 2>/dev/null)
@@ -674,7 +674,7 @@ full() {
               return 0
             fi
           fi
-        done < <(jq -r '.[] | .messages[]? // empty' "$json_file" 2>/dev/null)
+        done < <(jq -c '.messages[]' "$json_file" 2>/dev/null)
 
         if [[ -n "${temp_file:-}" && -f "${temp_file:-}" ]]; then
           rm -f "$temp_file"
