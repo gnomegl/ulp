@@ -196,11 +196,12 @@ dedupe() {
   echo "Lines not matching format were ignored"
 }
 
-# @cmd Convert cleaned credential files to NDJSON/JSONL format for Meilisearch indexing
+# @cmd Convert cleaned credential files to NDJSON/JSONL format for Meilisearch indexing with freshness scoring
 # @arg input-file! "Input file or directory to process (recursively processes directories)" [string]
 # @option -j --json-file "JSON metadata file (optional)" [string]
 # @option -c --channel-name "Telegram channel name (optional)" [string]
 # @option -a --channel-at "Telegram channel @ handle (optional)" [string]
+# @flag --no-freshness "Disable freshness scoring"
 jsonl() {
   if [[ ! -f "$argc_input_file" && ! -d "$argc_input_file" ]]; then
     echo "Error: Input file or directory '$argc_input_file' not found" >&2
@@ -337,12 +338,155 @@ jsonl() {
               use JSON;
               use POSIX qw(strftime);
               use Encode qw(encode_utf8);
+              use Time::Local;
+              
+              # Freshness scoring configuration
+              my %FRESHNESS_CONFIG = (
+                  # Score range (1 to 5)
+                  "min_score" => 1,
+                  "max_score" => 5,
+                  
+                  # Duplicate percentage thresholds for base scores (out of 5)
+                  "duplicate_thresholds" => [
+                      { "max_percent" => 0.05, "score" => 5 },  # < 5% duplicates: Score 5 (excellent)
+                      { "max_percent" => 0.15, "score" => 4 },  # 5-15% duplicates: Score 4 (good)
+                      { "max_percent" => 0.35, "score" => 3 },  # 15-35% duplicates: Score 3 (fair)
+                      { "max_percent" => 0.60, "score" => 2 },  # 35-60% duplicates: Score 2 (poor)
+                      { "max_percent" => 1.00, "score" => 1 },  # 60%+ duplicates: Score 1 (stale)
+                  ],
+                  
+                  # File size bonus (can add +0.5 to score for large fresh files)
+                  "size_bonus_threshold" => 1000,  # Minimum lines for size bonus
+                  "size_bonus_amount" => 0.5,      # Bonus amount for large files
+                  "size_bonus_max_duplicates" => 0.10,  # Only apply bonus if < 10% duplicates
+                  
+                  # Age penalty (can subtract up to -1.0 from score)
+                  "age_penalty_days" => 30,        # Days before age penalty starts
+                  "age_penalty_max" => 1.0,        # Maximum age penalty
+              );
+              
+              # Freshness scoring functions
+              sub get_base_score_from_duplicates {
+                  my ($duplicate_percentage) = @_;
+                  
+                  my $thresholds = $FRESHNESS_CONFIG{"duplicate_thresholds"};
+                  
+                  # Find the appropriate score based on duplicate percentage
+                  for my $threshold (@$thresholds) {
+                      if ($duplicate_percentage < $threshold->{"max_percent"}) {
+                          return $threshold->{"score"};
+                      }
+                  }
+                  
+                  # If we get here, return the lowest score
+                  return 1;
+              }
+              
+              sub calculate_age_penalty {
+                  my ($file_date) = @_;
+                  
+                  # Parse date (assuming ISO format or Unix timestamp)
+                  my $file_timestamp;
+                  if ($file_date =~ /^\d+$/) {
+                      # Unix timestamp
+                      $file_timestamp = $file_date;
+                  } elsif ($file_date =~ /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/) {
+                      # ISO format - convert to timestamp
+                      $file_timestamp = timelocal($6, $5, $4, $3, $2-1, $1);
+                  }
+                  
+                  return 0 unless defined $file_timestamp;
+                  
+                  my $current_time = time();
+                  my $age_days = ($current_time - $file_timestamp) / (24 * 60 * 60);
+                  
+                  my $penalty_threshold = $FRESHNESS_CONFIG{"age_penalty_days"};
+                  my $max_penalty = $FRESHNESS_CONFIG{"age_penalty_max"};
+                  
+                  if ($age_days <= $penalty_threshold) {
+                      return 0;
+                  }
+                  
+                  # Linear penalty after threshold
+                  my $penalty = ($age_days - $penalty_threshold) / (365 - $penalty_threshold) * $max_penalty;
+                  
+                  return ($penalty < $max_penalty) ? $penalty : $max_penalty;
+              }
+              
+              sub get_freshness_category {
+                  my ($score) = @_;
+                  
+                  if ($score >= 4.5) {
+                      return "excellent";
+                  } elsif ($score >= 3.5) {
+                      return "good";
+                  } elsif ($score >= 2.5) {
+                      return "fair";
+                  } elsif ($score >= 1.5) {
+                      return "poor";
+                  } else {
+                      return "stale";
+                  }
+              }
+              
+              sub calculate_freshness_score {
+                  my ($total_lines, $valid_lines, $duplicate_lines, $file_date, $file_size_bytes) = @_;
+                  
+                  # Calculate duplicate percentage
+                  my $duplicate_percentage = 0;
+                  if ($total_lines > 0) {
+                      $duplicate_percentage = $duplicate_lines / $total_lines;
+                  }
+                  
+                  # Get base score from duplicate percentage (1-5 scale)
+                  my $score = get_base_score_from_duplicates($duplicate_percentage);
+                  
+                  # Apply size bonus for large files with very low duplicates
+                  if ($valid_lines >= $FRESHNESS_CONFIG{"size_bonus_threshold"} && 
+                      $duplicate_percentage <= $FRESHNESS_CONFIG{"size_bonus_max_duplicates"}) {
+                      $score += $FRESHNESS_CONFIG{"size_bonus_amount"};
+                  }
+                  
+                  # Apply age penalty if date is available
+                  if (defined $file_date && $file_date ne "") {
+                      my $age_penalty = calculate_age_penalty($file_date);
+                      $score -= $age_penalty;
+                  }
+                  
+                  # Clamp score to valid range (1-5)
+                  $score = ($score < $FRESHNESS_CONFIG{"min_score"}) ? $FRESHNESS_CONFIG{"min_score"} : $score;
+                  $score = ($score > $FRESHNESS_CONFIG{"max_score"}) ? $FRESHNESS_CONFIG{"max_score"} : $score;
+                  
+                  # Round to 1 decimal place for cleaner output
+                  return sprintf("%.1f", $score);
+              }
+              
+              sub create_freshness_metadata {
+                  my ($total_lines, $valid_lines, $duplicate_lines, $file_date, $file_size_bytes) = @_;
+                  
+                  my $score = calculate_freshness_score($total_lines, $valid_lines, $duplicate_lines, $file_date, $file_size_bytes);
+                  my $category = get_freshness_category($score);
+                  my $duplicate_percentage = $total_lines > 0 ? sprintf("%.3f", $duplicate_lines / $total_lines) : "0.000";
+                  
+                  return {
+                      "freshness_score" => $score + 0,  # Ensure numeric
+                      "freshness_category" => $category,
+                      "duplicate_percentage" => $duplicate_percentage + 0,  # Ensure numeric
+                      "total_lines_processed" => $total_lines + 0,
+                      "valid_credentials" => $valid_lines + 0,
+                      "duplicates_removed" => $duplicate_lines + 0,
+                      "scoring_algorithm_version" => "1.0"
+                  };
+              }
 
               my $file_counter = 1;
               my $current_file_size = 0;
               my $max_size = 100 * 1024 * 1024; # 100MB 
               my $line_count = 0;
               my $valid_line_count = 0;
+              my $duplicate_count = 0;
+              my $file_size_bytes = 0;
+              my %seen = ();
 
               my $original_filename = $ENV{ULP_ORIGINAL_FILENAME} || "";
               my $ndjson_base = $ENV{ULP_NDJSON_BASE} || "";
@@ -380,9 +524,12 @@ jsonl() {
               $main::file_counter = $file_counter;
               $main::line_count = $line_count;
               $main::valid_line_count = $valid_line_count;
+              $main::duplicate_count = $duplicate_count;
+              $main::file_size_bytes = $file_size_bytes;
           }
 
           $main::line_count++;
+          $main::file_size_bytes += length($_) + 1;
 
           next unless /[:|]/;
 
@@ -407,6 +554,12 @@ jsonl() {
               }
           }
 
+          # Track duplicates
+          if ($seen{$cleaned_line}++) {
+              $main::duplicate_count++;
+              next;
+          }
+
           my @parts = split /:/, $cleaned_line;
           if (@parts < 3) {
               next; 
@@ -425,6 +578,15 @@ jsonl() {
               $full_url = "https://" . $full_url;
           }
 
+          # Calculate freshness metadata
+          my $freshness_metadata = create_freshness_metadata(
+              $main::line_count,
+              $main::valid_line_count + 1,
+              $main::duplicate_count,
+              $main::post_date,
+              $main::file_size_bytes
+          );
+
           my $doc = {
               url => $full_url,
               username => $username,
@@ -436,7 +598,8 @@ jsonl() {
                   telegram_channel_at => $main::channel_at,
                   date_posted => $main::post_date,
                   message_content => $main::message_content,
-                  message_id => $main::message_id
+                  message_id => $main::message_id,
+                  freshness => $freshness_metadata
               }
           };
 
@@ -452,8 +615,20 @@ jsonl() {
           $main::valid_line_count++;
 
           END {
+              # Calculate final freshness score
+              my $final_freshness = create_freshness_metadata(
+                  $main::line_count,
+                  $main::valid_line_count,
+                  $main::duplicate_count,
+                  $main::post_date,
+                  $main::file_size_bytes
+              );
+              
               close($main::ndjson_fh) if $main::ndjson_fh;
               print STDERR "Processed $main::line_count total lines, $main::valid_line_count valid credential lines\n";
+              print STDERR "Duplicates removed: $main::duplicate_count\n";
+              print STDERR "Freshness score: " . $final_freshness->{freshness_score} . " (" . $final_freshness->{freshness_category} . ")\n";
+              print STDERR "Duplicate percentage: " . sprintf("%.1f", $final_freshness->{duplicate_percentage} * 100) . "%\n";
           }
       ' <"$input_file"
   }
@@ -621,11 +796,12 @@ main() {
   echo "Lines not matching format were ignored"
 }
 
-# @cmd Full processing - clean, dedupe, and convert to JSONL in one pass
+# @cmd Full processing - clean, dedupe, and convert to JSONL in one pass with freshness scoring
 # @arg input-file! "Input file or directory to process (recursively processes directories)" [string]
 # @option -j --json-file "JSON metadata file (optional)" [string]
 # @option -c --channel-name "Telegram channel name (optional)" [string]
 # @option -a --channel-at "Telegram channel @ handle (optional)" [string]
+# @flag --no-freshness "Disable freshness scoring"
 full() {
   if [[ ! -f "$argc_input_file" && ! -d "$argc_input_file" ]]; then
     echo "Error: Input file or directory '$argc_input_file' not found" >&2
@@ -795,6 +971,146 @@ full() {
               use JSON;
               use POSIX qw(strftime);
               use Encode qw(encode_utf8);
+              use Time::Local;
+              
+              # Freshness scoring configuration
+              my %FRESHNESS_CONFIG = (
+                  # Score range (1 to 5)
+                  "min_score" => 1,
+                  "max_score" => 5,
+                  
+                  # Duplicate percentage thresholds for base scores (out of 5)
+                  "duplicate_thresholds" => [
+                      { "max_percent" => 0.05, "score" => 5 },  # < 5% duplicates: Score 5 (excellent)
+                      { "max_percent" => 0.15, "score" => 4 },  # 5-15% duplicates: Score 4 (good)
+                      { "max_percent" => 0.35, "score" => 3 },  # 15-35% duplicates: Score 3 (fair)
+                      { "max_percent" => 0.60, "score" => 2 },  # 35-60% duplicates: Score 2 (poor)
+                      { "max_percent" => 1.00, "score" => 1 },  # 60%+ duplicates: Score 1 (stale)
+                  ],
+                  
+                  # File size bonus (can add +0.5 to score for large fresh files)
+                  "size_bonus_threshold" => 1000,  # Minimum lines for size bonus
+                  "size_bonus_amount" => 0.5,      # Bonus amount for large files
+                  "size_bonus_max_duplicates" => 0.10,  # Only apply bonus if < 10% duplicates
+                  
+                  # Age penalty (can subtract up to -1.0 from score)
+                  "age_penalty_days" => 30,        # Days before age penalty starts
+                  "age_penalty_max" => 1.0,        # Maximum age penalty
+              );
+              
+              # Freshness scoring functions
+              sub get_base_score_from_duplicates {
+                  my ($duplicate_percentage) = @_;
+                  
+                  my $thresholds = $FRESHNESS_CONFIG{"duplicate_thresholds"};
+                  
+                  # Find the appropriate score based on duplicate percentage
+                  for my $threshold (@$thresholds) {
+                      if ($duplicate_percentage < $threshold->{"max_percent"}) {
+                          return $threshold->{"score"};
+                      }
+                  }
+                  
+                  # If we get here, return the lowest score
+                  return 1;
+              }
+              
+              sub calculate_age_penalty {
+                  my ($file_date) = @_;
+                  
+                  # Parse date (assuming ISO format or Unix timestamp)
+                  my $file_timestamp;
+                  if ($file_date =~ /^\d+$/) {
+                      # Unix timestamp
+                      $file_timestamp = $file_date;
+                  } elsif ($file_date =~ /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/) {
+                      # ISO format - convert to timestamp
+                      $file_timestamp = timelocal($6, $5, $4, $3, $2-1, $1);
+                  }
+                  
+                  return 0 unless defined $file_timestamp;
+                  
+                  my $current_time = time();
+                  my $age_days = ($current_time - $file_timestamp) / (24 * 60 * 60);
+                  
+                  my $penalty_threshold = $FRESHNESS_CONFIG{"age_penalty_days"};
+                  my $max_penalty = $FRESHNESS_CONFIG{"age_penalty_max"};
+                  
+                  if ($age_days <= $penalty_threshold) {
+                      return 0;
+                  }
+                  
+                  # Linear penalty after threshold
+                  my $penalty = ($age_days - $penalty_threshold) / (365 - $penalty_threshold) * $max_penalty;
+                  
+                  return ($penalty < $max_penalty) ? $penalty : $max_penalty;
+              }
+              
+              sub get_freshness_category {
+                  my ($score) = @_;
+                  
+                  if ($score >= 4.5) {
+                      return "excellent";
+                  } elsif ($score >= 3.5) {
+                      return "good";
+                  } elsif ($score >= 2.5) {
+                      return "fair";
+                  } elsif ($score >= 1.5) {
+                      return "poor";
+                  } else {
+                      return "stale";
+                  }
+              }
+              
+              sub calculate_freshness_score {
+                  my ($total_lines, $valid_lines, $duplicate_lines, $file_date, $file_size_bytes) = @_;
+                  
+                  # Calculate duplicate percentage
+                  my $duplicate_percentage = 0;
+                  if ($total_lines > 0) {
+                      $duplicate_percentage = $duplicate_lines / $total_lines;
+                  }
+                  
+                  # Get base score from duplicate percentage (1-5 scale)
+                  my $score = get_base_score_from_duplicates($duplicate_percentage);
+                  
+                  # Apply size bonus for large files with very low duplicates
+                  if ($valid_lines >= $FRESHNESS_CONFIG{"size_bonus_threshold"} && 
+                      $duplicate_percentage <= $FRESHNESS_CONFIG{"size_bonus_max_duplicates"}) {
+                      $score += $FRESHNESS_CONFIG{"size_bonus_amount"};
+                  }
+                  
+                  # Apply age penalty if date is available
+                  if (defined $file_date && $file_date ne "") {
+                      my $age_penalty = calculate_age_penalty($file_date);
+                      $score -= $age_penalty;
+                  }
+                  
+                  # Clamp score to valid range (1-5)
+                  $score = ($score < $FRESHNESS_CONFIG{"min_score"}) ? $FRESHNESS_CONFIG{"min_score"} : $score;
+                  $score = ($score > $FRESHNESS_CONFIG{"max_score"}) ? $FRESHNESS_CONFIG{"max_score"} : $score;
+                  
+                  # Round to 1 decimal place for cleaner output
+                  return sprintf("%.1f", $score);
+              }
+              
+              sub create_freshness_metadata {
+                  my ($total_lines, $valid_lines, $duplicate_lines, $file_date, $file_size_bytes) = @_;
+                  
+                  my $score = calculate_freshness_score($total_lines, $valid_lines, $duplicate_lines, $file_date, $file_size_bytes);
+                  my $category = get_freshness_category($score);
+                  my $duplicate_percentage = $total_lines > 0 ? sprintf("%.3f", $duplicate_lines / $total_lines) : "0.000";
+                  
+                  return {
+                      "freshness_score" => $score + 0,  # Ensure numeric
+                      "freshness_category" => $category,
+                      "duplicate_percentage" => $duplicate_percentage + 0,  # Ensure numeric
+                      "total_lines_processed" => $total_lines + 0,
+                      "valid_credentials" => $valid_lines + 0,
+                      "duplicates_removed" => $duplicate_lines + 0,
+                      "scoring_algorithm_version" => "1.0"
+                  };
+              }
 
               my $chunk_size = 100 * 1024 * 1024; # 100MB chunks
               my $current_chunk_size = 0;
@@ -807,6 +1123,7 @@ full() {
               my $line_count = 0;
               my $valid_line_count = 0;
               my $duplicate_count = 0;
+              my $file_size_bytes = 0;
 
               my $original_filename = $ENV{ULP_ORIGINAL_FILENAME} || "";
               my $ndjson_base = $ENV{ULP_NDJSON_BASE} || "";
@@ -832,6 +1149,15 @@ full() {
 
               sub process_chunk {
                   my $lines_ref = shift;
+                  
+                  # Calculate freshness score for this file
+                  my $freshness_metadata = create_freshness_metadata(
+                      $main::line_count,
+                      $main::valid_line_count + scalar(@$lines_ref),
+                      $main::duplicate_count,
+                      $main::post_date,
+                      $main::file_size_bytes
+                  );
                   
                   for my $line (@$lines_ref) {
                       my @parts = split /:/, $line;
@@ -861,7 +1187,8 @@ full() {
                               telegram_channel_at => $main::channel_at,
                               date_posted => $main::post_date,
                               message_content => $main::message_content,
-                              message_id => $main::message_id
+                              message_id => $main::message_id,
+                              freshness => $freshness_metadata
                           }
                       };
 
@@ -895,9 +1222,11 @@ full() {
               $main::line_count = $line_count;
               $main::valid_line_count = $valid_line_count;
               $main::duplicate_count = $duplicate_count;
+              $main::file_size_bytes = $file_size_bytes;
           }
 
           $main::line_count++;
+          $main::file_size_bytes += length($_) + 1;  # Track file size
 
           # Skip lines that dont match format
           next unless /[:|]/;
@@ -944,10 +1273,21 @@ full() {
               # Process any remaining lines
               process_chunk(\@chunk_lines) if @chunk_lines;
               
+              # Calculate final freshness score
+              my $final_freshness = create_freshness_metadata(
+                  $main::line_count,
+                  $main::valid_line_count,
+                  $main::duplicate_count,
+                  $main::post_date,
+                  $main::file_size_bytes
+              );
+              
               close($main::ndjson_fh) if $main::ndjson_fh;
               print STDERR "Processed $main::line_count total lines\n";
               print STDERR "Valid credentials: $main::valid_line_count\n";
               print STDERR "Duplicates removed: $main::duplicate_count\n";
+              print STDERR "Freshness score: " . $final_freshness->{freshness_score} . " (" . $final_freshness->{freshness_category} . ")\n";
+              print STDERR "Duplicate percentage: " . sprintf("%.1f", $final_freshness->{duplicate_percentage} * 100) . "%\n";
           }
       ' <"$input_file"
   }
