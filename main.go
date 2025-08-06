@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/gnome/ulp/cmd"
+	"github.com/gnomegl/ulp/cmd"
 )
 
 func main() {

@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gnome/ulp/pkg/credential"
-	"github.com/gnome/ulp/pkg/fileutil"
-	"github.com/gnome/ulp/pkg/output"
-	"github.com/gnome/ulp/pkg/telegram"
+	"github.com/gnomegl/ulp/pkg/credential"
+	"github.com/gnomegl/ulp/pkg/fileutil"
+	"github.com/gnomegl/ulp/pkg/output"
+	"github.com/gnomegl/ulp/pkg/telegram"
 	"github.com/spf13/cobra"
 )
 

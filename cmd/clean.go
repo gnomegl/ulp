@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gnome/ulp/pkg/credential"
-	"github.com/gnome/ulp/pkg/fileutil"
+	"github.com/gnomegl/ulp/pkg/credential"
+	"github.com/gnomegl/ulp/pkg/fileutil"
 	"github.com/spf13/cobra"
 )
 
@@ -57,7 +57,6 @@ func processFile(processor credential.CredentialProcessor, inputPath, outputPath
 		return fmt.Errorf("failed to process file: %w", err)
 	}
 
-	// Write cleaned credentials to output file
 	var lines []string
 	for _, cred := range result.Credentials {
 		// Convert back to domain:user:pass format
@@ -97,12 +96,10 @@ func processDirectory(processor credential.CredentialProcessor, inputPath, outpu
 		relPath := fileutil.GetRelativePath(inputPath, filePath)
 		outputFilePath := fileutil.GetDefaultOutputPath(outputPath+"/"+relPath, "_cleaned")
 
-		// Ensure output directory exists
 		if err := fileutil.EnsureDirectoryExists(fileutil.GetDefaultOutputPath(outputPath, "")); err != nil {
 			return fmt.Errorf("failed to create output subdirectory: %w", err)
 		}
 
-		// Write cleaned credentials
 		var lines []string
 		for _, cred := range result.Credentials {
 			domain := cred.URL

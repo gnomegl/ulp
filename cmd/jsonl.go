@@ -5,10 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/gnome/ulp/pkg/credential"
-	"github.com/gnome/ulp/pkg/fileutil"
-	"github.com/gnome/ulp/pkg/output"
-	"github.com/gnome/ulp/pkg/telegram"
+	"github.com/gnomegl/ulp/pkg/credential"
+	"github.com/gnomegl/ulp/pkg/fileutil"
+	"github.com/gnomegl/ulp/pkg/output"
+	"github.com/gnomegl/ulp/pkg/telegram"
 	"github.com/spf13/cobra"
 )
 
@@ -96,21 +96,17 @@ func processFileJSONL(processor credential.CredentialProcessor, inputPath string
 		}
 	}
 
-	// Create NDJSON writer
 	writer := output.NewNDJSONWriter(100 * 1024 * 1024) // 100MB max file size
 	defer writer.Close()
 
-	// Determine output base name with directory
 	outputBaseName := fileutil.GetNDJSONBaseName(inputPath)
 	if outputDir != "" {
-		// Ensure output directory exists
 		if err := fileutil.EnsureDirectoryExists(outputDir); err != nil {
 			return fmt.Errorf("failed to create output directory: %w", err)
 		}
 		outputBaseName = filepath.Join(outputDir, filepath.Base(outputBaseName))
 	}
 
-	// Write credentials to NDJSON
 	writerOpts := output.WriterOptions{
 		MaxFileSize:      100 * 1024 * 1024,
 		OutputBaseName:   outputBaseName,
@@ -143,7 +139,6 @@ func processDirectoryJSONL(processor credential.CredentialProcessor, inputPath s
 	for filePath, result := range results {
 		fmt.Fprintf(os.Stderr, "Processing file: %s\n", filePath)
 
-		// Extract Telegram metadata for this specific file
 		var telegramMeta *output.TelegramMetadata
 		if jsonFile != "" {
 			extractor := telegram.NewDefaultExtractor()
@@ -162,18 +157,15 @@ func processDirectoryJSONL(processor credential.CredentialProcessor, inputPath s
 			}
 		}
 
-		// Determine output base name with directory
 		outputBaseName := fileutil.GetNDJSONBaseName(filePath)
 		if outputDir != "" {
-			// Preserve directory structure in output
 			relPath := fileutil.GetRelativePath(inputPath, filePath)
 			outputPath := filepath.Join(outputDir, filepath.Dir(relPath))
-			
-			// Ensure output directory exists
+
 			if err := fileutil.EnsureDirectoryExists(outputPath); err != nil {
 				return fmt.Errorf("failed to create output directory: %w", err)
 			}
-			
+
 			outputBaseName = filepath.Join(outputPath, filepath.Base(outputBaseName))
 		}
 

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gnome/ulp/pkg/credential"
-	"github.com/gnome/ulp/pkg/fileutil"
+	"github.com/gnomegl/ulp/pkg/credential"
+	"github.com/gnomegl/ulp/pkg/fileutil"
 	"github.com/spf13/cobra"
 )
 
@@ -66,7 +66,6 @@ func processFileDedupe(processor credential.CredentialProcessor, inputPath, outp
 		return fmt.Errorf("failed to process file: %w", err)
 	}
 
-	// Write deduplicated credentials to output file
 	var lines []string
 	for _, cred := range result.Credentials {
 		domain := cred.URL
@@ -111,7 +110,6 @@ func processDirectoryDedupe(processor credential.CredentialProcessor, inputPath,
 		relPath := fileutil.GetRelativePath(inputPath, filePath)
 		outputFilePath := fileutil.GetDefaultOutputPath(outputPath+"/"+relPath, "_deduped")
 
-		// Write deduplicated credentials
 		var lines []string
 		for _, cred := range result.Credentials {
 			domain := cred.URL

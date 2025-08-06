@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gnome/ulp/pkg/fileutil"
+	"github.com/gnomegl/ulp/pkg/fileutil"
 )
 
 type DefaultProcessor struct {

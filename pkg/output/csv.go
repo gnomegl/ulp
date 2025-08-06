@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/gnome/ulp/pkg/credential"
+	"github.com/gnomegl/ulp/pkg/credential"
 )
 
 type CSVWriter struct {

@@ -16,10 +16,8 @@ func (n *DefaultURLNormalizer) Normalize(rawURL string) string {
 		return ""
 	}
 
-	// Replace pipe characters with colons
 	normalized := strings.ReplaceAll(rawURL, "|", ":")
 
-	// Remove carriage returns and newlines
 	normalized = strings.ReplaceAll(normalized, "\r", "")
 	normalized = strings.ReplaceAll(normalized, "\n", "")
 	normalized = strings.TrimSpace(normalized)

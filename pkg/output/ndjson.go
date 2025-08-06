@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/gnome/ulp/pkg/credential"
-	"github.com/gnome/ulp/pkg/freshness"
+	"github.com/gnomegl/ulp/pkg/credential"
+	"github.com/gnomegl/ulp/pkg/freshness"
 )
 
 type NDJSONWriter struct {

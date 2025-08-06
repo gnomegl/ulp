@@ -1,4 +1,4 @@
-module github.com/gnome/ulp
+module github.com/gnomegl/ulp
 
 go 1.21
 

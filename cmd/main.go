@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gnome/ulp/pkg/credential"
-	"github.com/gnome/ulp/pkg/fileutil"
+	"github.com/gnomegl/ulp/pkg/credential"
+	"github.com/gnomegl/ulp/pkg/fileutil"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +29,6 @@ func init() {
 	mainCmd.Flags().StringVarP(&channelName, "channel-name", "c", "", "Telegram channel name (optional)")
 	mainCmd.Flags().StringVarP(&channelAt, "channel-at", "a", "", "Telegram channel @ handle (optional)")
 
-	// Set this as the default command when no subcommand is specified
 	rootCmd.RunE = runMain
 	rootCmd.Flags().BoolVar(&noDedupe, "no-dedupe", false, "Disable deduplication (only clean)")
 	rootCmd.Flags().StringVarP(&dupesFile, "dupes-file", "d", "", "Output duplicate lines to this file (implies deduplication)")
@@ -58,7 +57,6 @@ func runMain(cmd *cobra.Command, args []string) error {
 
 	processor := credential.NewDefaultProcessor()
 
-	// Determine if deduplication should be enabled
 	enableDedupe := !noDedupe || dupesFile != ""
 
 	opts := credential.ProcessingOptions{
@@ -89,7 +87,6 @@ func processFileMain(processor credential.CredentialProcessor, inputPath, output
 		return fmt.Errorf("failed to process file: %w", err)
 	}
 
-	// Write processed credentials to output file
 	var lines []string
 	for _, cred := range result.Credentials {
 		domain := cred.URL
@@ -134,7 +131,6 @@ func processDirectoryMain(processor credential.CredentialProcessor, inputPath, o
 		relPath := fileutil.GetRelativePath(inputPath, filePath)
 		outputFilePath := fileutil.GetDefaultOutputPath(outputPath+"/"+relPath, "_cleaned")
 
-		// Write processed credentials
 		var lines []string
 		for _, cred := range result.Credentials {
 			domain := cred.URL
