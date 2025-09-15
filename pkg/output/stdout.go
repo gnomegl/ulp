@@ -2,7 +2,9 @@ package output
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/csv"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -22,6 +24,13 @@ func NewStdoutWriter(format string) *StdoutWriter {
 		format: format,
 		writer: bufio.NewWriter(os.Stdout),
 	}
+}
+
+// generateDocID creates a hash from the cleaned username, url, and password
+func generateDocID(username, url, password string) string {
+	data := fmt.Sprintf("%s:%s:%s", username, url, password)
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:])
 }
 
 func (w *StdoutWriter) WriteCredentials(credentials []credential.Credential, stats credential.ProcessingStats, opts WriterOptions) error {
@@ -47,19 +56,20 @@ func (w *StdoutWriter) writeText(credentials []credential.Credential) error {
 func (w *StdoutWriter) writeCSV(credentials []credential.Credential, opts WriterOptions) error {
 	csvWriter := csv.NewWriter(w.writer)
 
-	// Write header
-	header := []string{"channel", "username", "password", "url", "date"}
+	// Write header with doc_id
+	header := []string{"doc_id", "channel", "username", "password", "url", "date"}
 	if err := csvWriter.Write(header); err != nil {
 		return err
 	}
 
 	for _, cred := range credentials {
-		record := []string{"", cred.Username, cred.Password, cred.URL, ""}
+		docID := generateDocID(cred.Username, cred.URL, cred.Password)
+		record := []string{docID, "", cred.Username, cred.Password, cred.URL, ""}
 
 		if opts.TelegramMetadata != nil {
-			record[0] = opts.TelegramMetadata.ChannelName
+			record[1] = opts.TelegramMetadata.ChannelName
 			if opts.TelegramMetadata.DatePosted != nil {
-				record[4] = opts.TelegramMetadata.DatePosted.Format(time.RFC3339)
+				record[5] = opts.TelegramMetadata.DatePosted.Format(time.RFC3339)
 			}
 		}
 
@@ -89,6 +99,8 @@ func (w *StdoutWriter) writeJSONL(credentials []credential.Credential, stats cre
 	}
 
 	for _, cred := range credentials {
+		docID := generateDocID(cred.Username, cred.URL, cred.Password)
+
 		doc := Document{
 			URL:      cred.URL,
 			Username: cred.Username,
@@ -117,6 +129,7 @@ func (w *StdoutWriter) writeJSONL(credentials []credential.Credential, stats cre
 		}
 
 		output := map[string]interface{}{
+			"doc_id":   docID,
 			"url":      doc.URL,
 			"username": doc.Username,
 			"password": doc.Password,
@@ -135,6 +148,10 @@ func (w *StdoutWriter) writeJSONL(credentials []credential.Credential, stats cre
 		}
 	}
 
+	return w.writer.Flush()
+}
+
+func (w *StdoutWriter) Flush() error {
 	return w.writer.Flush()
 }
 

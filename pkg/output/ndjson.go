@@ -2,6 +2,8 @@ package output
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +12,13 @@ import (
 	"github.com/gnomegl/ulp/pkg/credential"
 	"github.com/gnomegl/ulp/pkg/freshness"
 )
+
+// generateNDJSONDocID creates a hash from the cleaned username, url, and password
+func generateNDJSONDocID(username, url, password string) string {
+	data := fmt.Sprintf("%s:%s:%s", username, url, password)
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:])
+}
 
 type NDJSONWriter struct {
 	fileManager   *NDJSONFileManager
@@ -70,9 +79,48 @@ func (w *NDJSONWriter) WriteCredentials(credentials []credential.Credential, sta
 
 	// Write each credential as NDJSON
 	for _, cred := range credentials {
+		// Generate doc_id from cleaned credentials
+		docID := generateNDJSONDocID(cred.Username, cred.URL, cred.Password)
+
+		// Create document with metadata
 		doc := w.createDocument(cred, opts, freshnessScore)
 
-		jsonBytes, err := json.Marshal(doc)
+		// Create output structure with doc_id
+		output := map[string]interface{}{
+			"doc_id":   docID,
+			"url":      doc.URL,
+			"username": doc.Username,
+			"password": doc.Password,
+		}
+
+		// Add optional fields
+		if doc.Channel != "" {
+			output["channel"] = doc.Channel
+		}
+		if doc.Date != "" {
+			output["date"] = doc.Date
+		}
+
+		// Add metadata
+		metadata := Metadata{
+			OriginalFilename: opts.OutputBaseName,
+			Freshness:        freshnessScore,
+		}
+
+		if opts.TelegramMetadata != nil {
+			metadata.TelegramChannelID = opts.TelegramMetadata.ChannelID
+			metadata.TelegramChannelName = opts.TelegramMetadata.ChannelName
+			metadata.TelegramChannelAt = opts.TelegramMetadata.ChannelAt
+			metadata.MessageContent = opts.TelegramMetadata.MessageContent
+			metadata.MessageID = opts.TelegramMetadata.MessageID
+			if opts.TelegramMetadata.DatePosted != nil {
+				metadata.DatePosted = opts.TelegramMetadata.DatePosted.Format(time.RFC3339)
+			}
+		}
+
+		output["metadata"] = metadata
+
+		jsonBytes, err := json.Marshal(output)
 		if err != nil {
 			return fmt.Errorf("failed to marshal document: %w", err)
 		}
