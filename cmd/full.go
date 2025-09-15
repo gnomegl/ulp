@@ -18,10 +18,10 @@ var (
 
 var fullCmd = &cobra.Command{
 	Use:   "full [input-file]",
-	Short: "Full processing - clean, dedupe, and convert to JSONL/CSV in one pass",
-	Long: `Full processing - clean, dedupe, and convert to JSONL or CSV in one pass.
+	Short: "Full processing - clean, dedupe, and convert to TXT/JSONL/CSV in one pass",
+	Long: `Full processing - clean, dedupe, and convert to TXT, JSONL, or CSV in one pass.
 This is the recommended command for complete processing of credential files.
-Supports both JSONL (default) and CSV output formats.`,
+Supports TXT (default), JSONL, and CSV output formats.`,
 	Args: cobra.ExactArgs(1),
 	RunE: runFull,
 }
@@ -33,7 +33,7 @@ func init() {
 	fullCmd.Flags().BoolVar(&noFreshness, "no-freshness", false, "Disable freshness scoring")
 	fullCmd.Flags().BoolVarP(&split, "split", "s", false, "Enable file splitting at 100MB (default: single file)")
 	fullCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory for files (defaults to input file's directory)")
-	fullCmd.Flags().StringVarP(&outputFormat, "format", "f", "jsonl", "Output format: jsonl or csv (default: jsonl)")
+	fullCmd.Flags().StringVarP(&outputFormat, "format", "f", "txt", "Output format: txt, jsonl, or csv (default: txt)")
 	rootCmd.AddCommand(fullCmd)
 }
 
@@ -85,10 +85,13 @@ func processFileFull(processor credential.CredentialProcessor, inputPath string,
 	writerOpts := CreateWriterOptions(outputBaseName, telegramMeta, !noFreshness, !split)
 
 	var outputFiles []string
-	if outputFormat == "csv" {
+	switch outputFormat {
+	case "csv":
 		outputFiles, err = writeCSVOutput(result, effectiveOutputDir, writerOpts)
-	} else {
+	case "jsonl":
 		outputFiles, err = writeNDJSONOutput(result, effectiveOutputDir, writerOpts)
+	default: // txt is default
+		outputFiles, err = writeTextOutput(result, effectiveOutputDir, writerOpts)
 	}
 
 	if err != nil {
@@ -136,10 +139,13 @@ func processDirectoryFull(processor credential.CredentialProcessor, inputPath st
 		writerOpts := CreateWriterOptions(outputBaseName, telegramMeta, !noFreshness, !split)
 
 		var outputFiles []string
-		if outputFormat == "csv" {
+		switch outputFormat {
+		case "csv":
 			outputFiles, err = writeCSVOutput(result, fileOutputDir, writerOpts)
-		} else {
+		case "jsonl":
 			outputFiles, err = writeNDJSONOutput(result, fileOutputDir, writerOpts)
+		default: // txt is default
+			outputFiles, err = writeTextOutput(result, fileOutputDir, writerOpts)
 		}
 
 		if err != nil {
@@ -162,6 +168,24 @@ func processDirectoryFull(processor credential.CredentialProcessor, inputPath st
 	fmt.Printf("  Output directory: %s\n", effectiveOutputDir)
 
 	return nil
+}
+
+func writeTextOutput(result *credential.ProcessingResult, outputDir string, writerOpts output.WriterOptions) ([]string, error) {
+	outputFile := filepath.Join(outputDir, writerOpts.OutputBaseName+".txt")
+	writer, err := output.NewTextWriter(outputFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create text writer: %w", err)
+	}
+
+	if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
+		return nil, fmt.Errorf("failed to write credentials: %w", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close text writer: %w", err)
+	}
+
+	return []string{outputFile}, nil
 }
 
 func writeCSVOutput(result *credential.ProcessingResult, outputDir string, writerOpts output.WriterOptions) ([]string, error) {

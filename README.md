@@ -6,6 +6,7 @@ A high-performance credentials file processing tool with proper separation of co
 
 - **Credential Processing**: Clean and normalize domain formats from credential files
 - **Deduplication**: Remove duplicate entries with optional duplicate output file
+- **Multiple Output Formats**: TXT (default), NDJSON/JSONL, and CSV output formats
 - **NDJSON/JSONL Output**: Create structured JSON files for Meilisearch indexing
 - **Freshness Scoring**: Calculate quality scores based on duplicate percentage, file size, and age
 - **Telegram Integration**: Process Telegram channel metadata when available
@@ -37,11 +38,21 @@ go install github.com/gnomegl/ulp@latest
 # Deduplicate with duplicate output
 ./ulp dedupe input.txt output.txt --dupes-file duplicates.txt
 
+# Convert to text format (default)
+./ulp txt input.txt
+
 # Convert to NDJSON/JSONL format
 ./ulp jsonl input.txt
 
-# Full processing (clean, dedupe, and convert to JSONL)
+# Convert to CSV format
+./ulp csv input.txt
+
+# Full processing (clean, dedupe, and convert - default: txt)
 ./ulp full input.txt
+
+# Full processing with specific format
+./ulp full input.txt --format jsonl
+./ulp full input.txt --format csv
 
 # Process directory recursively
 ./ulp full /path/to/directory/
@@ -88,6 +99,8 @@ pkg/
 │   └── calculator.go      # Score calculation implementation
 ├── output/         # NDJSON/JSONL output generation
 │   ├── types.go           # Output data structures
+│   ├── text.go            # Text writer implementation
+│   ├── csv.go             # CSV writer implementation
 │   └── ndjson.go          # NDJSON writer implementation
 ├── telegram/       # Telegram metadata processing
 │   ├── types.go           # Telegram data structures
@@ -111,7 +124,24 @@ pkg/
 - `www.domain.com/path:username:password`
 - `domain.com|username|password` (pipe characters converted to colons)
 
-## NDJSON Output Structure
+## Output Formats
+
+### Text Output (Default)
+Simple, clean format for credentials:
+```
+url:email:password
+https://example.com:user1:pass123
+https://site.com:admin:secretpass
+```
+
+### CSV Output
+Structured CSV with metadata:
+```csv
+channel,username,password,url,date
+example_channel,user1,pass123,https://example.com,2024-01-01T12:00:00Z
+```
+
+### NDJSON Output Structure
 
 ```json
 {
