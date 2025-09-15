@@ -110,15 +110,20 @@ func processFileJSONL(processor credential.CredentialProcessor, inputPath string
 }
 
 func processDirectoryJSONL(processor credential.CredentialProcessor, inputPath string, opts credential.ProcessingOptions) error {
-	fmt.Fprintf(os.Stderr, "Processing directory recursively: %s\n", inputPath)
+	fmt.Fprintf(os.Stderr, "\n=== Processing directory: %s ===\n", inputPath)
 
 	results, err := processor.ProcessDirectory(inputPath, opts)
 	if err != nil {
 		return fmt.Errorf("failed to process directory: %w", err)
 	}
 
+	fmt.Fprintf(os.Stderr, "\n=== Writing JSONL files ===\n")
+	fileCount := 0
+	totalCount := len(results)
+
 	for filePath, result := range results {
-		fmt.Fprintf(os.Stderr, "Processing file: %s\n", filePath)
+		fileCount++
+		fmt.Fprintf(os.Stderr, "[%d/%d] Writing JSONL for: %s", fileCount, totalCount, filepath.Base(filePath))
 
 		telegramMeta := ExtractTelegramMetadata(
 			jsonlCmdFlags.JsonFile,
@@ -156,9 +161,11 @@ func processDirectoryJSONL(processor credential.CredentialProcessor, inputPath s
 		}
 
 		writer.Close()
+		fmt.Fprintf(os.Stderr, " - Done\n")
 	}
 
-	fmt.Printf("Directory processing completed: %s\n", inputPath)
+	fmt.Fprintf(os.Stderr, "\n=== Processing completed ===\n")
+	fmt.Printf("Successfully processed %d files from: %s\n", totalCount, inputPath)
 	if !jsonlCmdFlags.Split {
 		fmt.Printf("NDJSON files created with _ms.jsonl suffix for each processed file\n")
 	} else {

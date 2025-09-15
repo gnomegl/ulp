@@ -11,12 +11,48 @@ func NewDefaultURLNormalizer() *DefaultURLNormalizer {
 	return &DefaultURLNormalizer{}
 }
 
+// cleanTelegramGarbage removes corrupted emoji and Unicode patterns from Telegram
+func cleanTelegramGarbage(input string) string {
+	// Smart approach: Only keep characters that make sense in credential data
+	// This is much more maintainable than blacklisting specific corruption patterns
+
+	// Define what we want to KEEP (whitelist approach):
+	// - ASCII printable: 0x20-0x7E (includes letters, numbers, symbols)
+	// - Common Latin extended: À-ÿ but exclude the corruption range (À-Ã, Â)
+	// - Dots, slashes, colons for URLs
+	// - Basic punctuation that appears in passwords
+
+	// First pass: Remove obvious corruption patterns
+	// Characters in range U+00C0-U+00C3 (À, Á, Â, Ã) are telltale signs of UTF-8 corruption
+	// when they appear repeatedly or with ¢ (U+00A2)
+	result := regexp.MustCompile(`[À-Ã]+[¢Â]+|[Â¢]+[À-Ã]+|[ÀÁÂÃâ¢§¹°]+`).ReplaceAllString(input, "")
+
+	// Second pass: Remove control characters and non-printable
+	result = regexp.MustCompile(`[\x00-\x1F\x7F-\x9F]`).ReplaceAllString(result, "")
+
+	// Third pass: Remove emoji ranges (these shouldn't be in credential data)
+	// Using a more comprehensive approach for emoji blocks
+	result = regexp.MustCompile(`[\x{1F000}-\x{1FFFF}]|[\x{2600}-\x{27BF}]|[\x{FE00}-\x{FE0F}]|[\x{1F900}-\x{1F9FF}]`).ReplaceAllString(result, "")
+
+	// Fourth pass: Remove any remaining suspicious Unicode sequences
+	// If we see multiple non-ASCII characters in a row that aren't part of a valid domain
+	result = regexp.MustCompile(`[\x{0080}-\x{00BF}]{2,}`).ReplaceAllString(result, "")
+
+	// Clean up whitespace
+	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
+
+	return strings.TrimSpace(result)
+}
+
 func (n *DefaultURLNormalizer) Normalize(rawURL string) string {
 	if rawURL == "" {
 		return ""
 	}
 
-	normalized := strings.ReplaceAll(rawURL, "|", ":")
+	// Clean up Telegram emoji garbage and corrupted Unicode
+	normalized := cleanTelegramGarbage(rawURL)
+
+	normalized = strings.ReplaceAll(normalized, "|", ":")
 
 	normalized = strings.ReplaceAll(normalized, "\r", "")
 	normalized = strings.ReplaceAll(normalized, "\n", "")
@@ -70,18 +106,18 @@ func (n *DefaultURLNormalizer) Normalize(rawURL string) string {
 // ExtractNormalizedDomain extracts the domain part for deduplication purposes
 func ExtractNormalizedDomain(url string) string {
 	domain := url
-	
+
 	// Remove common protocols
 	if len(domain) >= 8 && domain[:8] == "https://" {
 		domain = domain[8:]
 	} else if len(domain) >= 7 && domain[:7] == "http://" {
 		domain = domain[7:]
 	}
-	
+
 	// Remove www prefix
 	if len(domain) >= 4 && domain[:4] == "www." {
 		domain = domain[4:]
 	}
-	
+
 	return domain
 }

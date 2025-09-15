@@ -40,13 +40,13 @@ func (p *DefaultProcessor) ProcessLine(line string) (*Credential, error) {
 
 	// Split into parts - handle Android URLs specially
 	var urlPart, username, password string
-	
+
 	if strings.HasPrefix(normalized, "android://") {
 		// For Android URLs, find the /: separator
 		if idx := strings.Index(normalized, "/:"); idx != -1 {
-			urlPart = normalized[:idx+1] // Include the trailing /
+			urlPart = normalized[:idx+1]    // Include the trailing /
 			remaining := normalized[idx+2:] // Skip the /:
-			
+
 			// Split the remaining part by first colon
 			colonIdx := strings.Index(remaining, ":")
 			if colonIdx == -1 {
@@ -63,7 +63,7 @@ func (p *DefaultProcessor) ProcessLine(line string) (*Credential, error) {
 		if len(parts) < 3 {
 			return nil, fmt.Errorf("insufficient parts after splitting (need at least 3)")
 		}
-		
+
 		urlPart = parts[0]
 		username = parts[1]
 		password = strings.Join(parts[2:], ":") // Rejoin in case password contains colons
@@ -114,9 +114,17 @@ func (p *DefaultProcessor) ProcessFile(filename string, opts ProcessingOptions) 
 	}
 
 	scanner := bufio.NewScanner(file)
+	lineCount := 0
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		stats.TotalLines++
+		lineCount++
+
+		// Show progress every 1000 lines for large files
+		if lineCount%1000 == 0 {
+			fmt.Fprintf(os.Stderr, ".")
+		}
 
 		cred, err := p.ProcessLine(line)
 		if err != nil {
@@ -162,7 +170,24 @@ func (p *DefaultProcessor) ProcessFile(filename string, opts ProcessingOptions) 
 func (p *DefaultProcessor) ProcessDirectory(dirname string, opts ProcessingOptions) (map[string]*ProcessingResult, error) {
 	results := make(map[string]*ProcessingResult)
 
+	// First, count total files
+	var totalFiles, processedFiles, skippedFiles int
 	err := filepath.Walk(dirname, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			totalFiles++
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to count files in directory %s: %w", dirname, err)
+	}
+
+	fmt.Fprintf(os.Stderr, "Found %d files to process in %s\n", totalFiles, dirname)
+
+	err = filepath.Walk(dirname, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -175,23 +200,33 @@ func (p *DefaultProcessor) ProcessDirectory(dirname string, opts ProcessingOptio
 		isBinary, err := fileutil.IsBinaryFile(path)
 		if err != nil {
 			// Log warning but continue processing other files
-			fmt.Fprintf(os.Stderr, "Warning: failed to check if file is binary %s: %v\n", path, err)
+			skippedFiles++
+			fmt.Fprintf(os.Stderr, "[%d/%d] Warning: failed to check if file is binary %s: %v\n",
+				processedFiles+skippedFiles, totalFiles, path, err)
 			return nil
 		}
 		if isBinary {
-			// Skip binary files silently
-			fmt.Fprintf(os.Stderr, "Skipping binary file: %s\n", path)
+			// Skip binary files with progress
+			skippedFiles++
+			fmt.Fprintf(os.Stderr, "[%d/%d] Skipping binary file: %s\n",
+				processedFiles+skippedFiles, totalFiles, filepath.Base(path))
 			return nil
 		}
 
 		// Process each file
+		fmt.Fprintf(os.Stderr, "[%d/%d] Processing: %s",
+			processedFiles+skippedFiles+1, totalFiles, filepath.Base(path))
+
 		result, err := p.ProcessFile(path, opts)
 		if err != nil {
 			// Log error but continue processing other files
-			fmt.Fprintf(os.Stderr, "Warning: failed to process file %s: %v\n", path, err)
+			skippedFiles++
+			fmt.Fprintf(os.Stderr, " - Error: %v\n", err)
 			return nil
 		}
 
+		processedFiles++
+		fmt.Fprintf(os.Stderr, " - Done (%d credentials found)\n", len(result.Credentials))
 		results[path] = result
 		return nil
 	})
@@ -199,6 +234,9 @@ func (p *DefaultProcessor) ProcessDirectory(dirname string, opts ProcessingOptio
 	if err != nil {
 		return nil, fmt.Errorf("failed to process directory %s: %w", dirname, err)
 	}
+
+	fmt.Fprintf(os.Stderr, "\nDirectory processing complete: %d files processed, %d skipped\n",
+		processedFiles, skippedFiles)
 
 	return results, nil
 }
