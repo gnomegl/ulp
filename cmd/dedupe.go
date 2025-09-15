@@ -2,15 +2,17 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
+	"github.com/gnomegl/ulp/internal/command"
+	"github.com/gnomegl/ulp/internal/flags"
 	"github.com/gnomegl/ulp/pkg/credential"
 	"github.com/gnomegl/ulp/pkg/fileutil"
 	"github.com/spf13/cobra"
 )
 
 var (
-	dupesFile string
+	dedupeCmdFlags flags.CommonFlags
+	dedupeBaseCmd  command.BaseCommand
 )
 
 var dedupeCmd = &cobra.Command{
@@ -23,112 +25,50 @@ Processes files or directories recursively and removes duplicate entries.`,
 }
 
 func init() {
-	dedupeCmd.Flags().StringVarP(&dupesFile, "dupes-file", "d", "", "Output duplicate lines to this file")
+	dedupeCmd.Flags().StringVarP(&dedupeCmdFlags.DupesFile, "dupes-file", "d", "", "Output duplicate lines to this file")
 	rootCmd.AddCommand(dedupeCmd)
 }
 
 func runDedupe(cmd *cobra.Command, args []string) error {
-	inputPath := args[0]
+	inputPath, outputPath := ParseArguments(args, "_processed")
 
-	var outputPath string
-	if len(args) > 1 {
-		outputPath = args[1]
-	} else {
-		outputPath = fileutil.GetDefaultOutputPath(inputPath, "_processed")
-	}
-
-	if !fileutil.FileExists(inputPath) {
-		return fmt.Errorf("input file or directory '%s' not found", inputPath)
+	dedupeBaseCmd.Flags = dedupeCmdFlags
+	if err := dedupeBaseCmd.ValidateInput(inputPath); err != nil {
+		return err
 	}
 
 	processor := credential.NewDefaultProcessor()
-	opts := credential.ProcessingOptions{
-		EnableDeduplication: true,
-		SaveDuplicates:      dupesFile != "",
-		DuplicatesFile:      dupesFile,
-	}
+	opts := CreateProcessingOptions(
+		true,
+		dedupeCmdFlags.DupesFile != "",
+		dedupeCmdFlags.DupesFile,
+	)
 
 	if fileutil.IsDirectory(inputPath) {
-		if dupesFile != "" {
-			fmt.Fprintf(os.Stderr, "Warning: --dupes-file option ignored when processing directories (individual dupes files created per input file)\n")
+		if dedupeCmdFlags.DupesFile != "" {
+			PrintDirectoryWarning()
 		}
-		return processDirectoryDedupe(processor, inputPath, outputPath, opts)
-	} else {
-		return processFileDedupe(processor, inputPath, outputPath, opts)
-	}
-}
-
-func processFileDedupe(processor credential.CredentialProcessor, inputPath, outputPath string, opts credential.ProcessingOptions) error {
-	fmt.Fprintf(os.Stderr, "Deduplicating: %s -> %s\n", inputPath, outputPath)
-
-	result, err := processor.ProcessFile(inputPath, opts)
-	if err != nil {
-		return fmt.Errorf("failed to process file: %w", err)
-	}
-
-	var lines []string
-	for _, cred := range result.Credentials {
-		domain := cred.URL
-		if len(domain) >= 8 && domain[:8] == "https://" {
-			domain = domain[8:]
-		} else if len(domain) >= 7 && domain[:7] == "http://" {
-			domain = domain[7:]
+		PrintProcessingStatus(inputPath, outputPath)
+		err := ProcessDirectory(processor, inputPath, outputPath, opts, false)
+		if err == nil {
+			PrintCompletionStatus(outputPath)
+			PrintIgnoredLinesWarning()
 		}
-		line := fmt.Sprintf("%s:%s:%s", domain, cred.Username, cred.Password)
-		lines = append(lines, line)
-	}
-
-	if err := fileutil.WriteLinesToFile(outputPath, lines); err != nil {
-		return fmt.Errorf("failed to write output file: %w", err)
-	}
-
-	fmt.Printf("Deduplicated file: %s\n", outputPath)
-	if opts.SaveDuplicates && opts.DuplicatesFile != "" {
-		fmt.Printf("Duplicate lines saved to: %s\n", opts.DuplicatesFile)
-		fmt.Printf("Total duplicates removed: %d\n", len(result.Duplicates))
+		return err
 	} else {
-		fmt.Printf("Duplicates removed (use --dupes-file to save duplicates to a file)\n")
-	}
-	fmt.Printf("Lines not matching format were ignored\n")
-
-	return nil
-}
-
-func processDirectoryDedupe(processor credential.CredentialProcessor, inputPath, outputPath string, opts credential.ProcessingOptions) error {
-	fmt.Fprintf(os.Stderr, "Processing directory recursively: %s -> %s\n", inputPath, outputPath)
-
-	if err := fileutil.EnsureDirectoryExists(outputPath); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	results, err := processor.ProcessDirectory(inputPath, opts)
-	if err != nil {
-		return fmt.Errorf("failed to process directory: %w", err)
-	}
-
-	for filePath, result := range results {
-		relPath := fileutil.GetRelativePath(inputPath, filePath)
-		outputFilePath := fileutil.GetDefaultOutputPath(outputPath+"/"+relPath, "_deduped")
-
-		var lines []string
-		for _, cred := range result.Credentials {
-			domain := cred.URL
-			if len(domain) >= 8 && domain[:8] == "https://" {
-				domain = domain[8:]
-			} else if len(domain) >= 7 && domain[:7] == "http://" {
-				domain = domain[7:]
+		PrintProcessingStatus(inputPath, outputPath)
+		err := ProcessSingleFile(processor, inputPath, outputPath, opts, false)
+		if err == nil {
+			PrintCompletionStatus(outputPath)
+			if opts.SaveDuplicates && opts.DuplicatesFile != "" {
+				result, _ := processor.ProcessFile(inputPath, opts)
+				fmt.Printf("Duplicate lines saved to: %s\n", opts.DuplicatesFile)
+				fmt.Printf("Total duplicates removed: %d\n", len(result.Duplicates))
+			} else {
+				fmt.Printf("Duplicates removed (use --dupes-file to save duplicates to a file)\n")
 			}
-			line := fmt.Sprintf("%s:%s:%s", domain, cred.Username, cred.Password)
-			lines = append(lines, line)
+			PrintIgnoredLinesWarning()
 		}
-
-		if err := fileutil.WriteLinesToFile(outputFilePath, lines); err != nil {
-			return fmt.Errorf("failed to write output file %s: %w", outputFilePath, err)
-		}
+		return err
 	}
-
-	fmt.Printf("Directory processing completed: %s -> %s\n", inputPath, outputPath)
-	fmt.Printf("Lines not matching format were ignored\n")
-
-	return nil
 }

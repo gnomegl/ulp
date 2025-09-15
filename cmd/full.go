@@ -40,11 +40,10 @@ func init() {
 func runFull(cmd *cobra.Command, args []string) error {
 	inputPath := args[0]
 
-	if !fileutil.FileExists(inputPath) {
-		return fmt.Errorf("input file or directory '%s' not found", inputPath)
+	if err := ValidateInputFile(inputPath); err != nil {
+		return err
 	}
 
-	// Auto-detect JSON file if not provided and input is a directory
 	if jsonFile == "" && fileutil.IsDirectory(inputPath) {
 		extractor := telegram.NewDefaultExtractor()
 		if autoJSON, err := extractor.AutoDetectJSONFile(inputPath); err == nil {
@@ -54,10 +53,7 @@ func runFull(cmd *cobra.Command, args []string) error {
 	}
 
 	processor := credential.NewDefaultProcessor()
-	opts := credential.ProcessingOptions{
-		EnableDeduplication: true, // Full processing includes deduplication
-		SaveDuplicates:      false,
-	}
+	opts := CreateProcessingOptions(true, false, "")
 
 	if fileutil.IsDirectory(inputPath) {
 		return processDirectoryFull(processor, inputPath, opts)
@@ -74,218 +70,159 @@ func processFileFull(processor credential.CredentialProcessor, inputPath string,
 		return fmt.Errorf("failed to process file: %w", err)
 	}
 
-	// Extract Telegram metadata if JSON file is provided
-	var telegramMeta *output.TelegramMetadata
-	if jsonFile != "" {
-		extractor := telegram.NewDefaultExtractor()
-		meta, err := extractor.ExtractFromFile(jsonFile, inputPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to extract Telegram metadata: %v\n", err)
-		} else {
-			telegramMeta = &output.TelegramMetadata{
-				ChannelID:      meta.ID,
-				ChannelName:    getChannelNameFull(meta.Name),
-				ChannelAt:      getChannelAtFull(meta.At),
-				DatePosted:     meta.DatePosted,
-				MessageContent: meta.MessageContent,
-				MessageID:      meta.MessageID,
-			}
-		}
+	telegramMeta := ExtractTelegramMetadata(jsonFile, inputPath, channelName, channelAt)
+
+	outputBaseName := GetOutputBaseName(inputPath)
+	effectiveOutputDir := outputDir
+	if effectiveOutputDir == "" {
+		effectiveOutputDir = filepath.Dir(inputPath)
 	}
 
-	// Handle different output formats
+	if err := EnsureOutputDirectory(effectiveOutputDir); err != nil {
+		return err
+	}
+
+	writerOpts := CreateWriterOptions(outputBaseName, telegramMeta, !noFreshness, !split)
+
+	var outputFiles []string
 	if outputFormat == "csv" {
-		// Determine output filename with directory
-		outputBaseName := fileutil.GetNDJSONBaseName(inputPath)
-		if outputDir != "" {
-			// Ensure output directory exists
-			if err := fileutil.EnsureDirectoryExists(outputDir); err != nil {
-				return fmt.Errorf("failed to create output directory: %w", err)
-			}
-			outputBaseName = filepath.Join(outputDir, filepath.Base(outputBaseName))
-		}
-		csvFilename := outputBaseName + ".csv"
-
-		// Create CSV writer
-		writer, err := output.NewCSVWriter(csvFilename)
-		if err != nil {
-			return fmt.Errorf("failed to create CSV writer: %w", err)
-		}
-		defer writer.Close()
-
-		// Write credentials to CSV
-		writerOpts := output.WriterOptions{
-			OutputBaseName:   outputBaseName,
-			TelegramMetadata: telegramMeta,
-			EnableFreshness:  false, // CSV doesn't include freshness
-			NoSplit:          true,  // CSV is always single file
-		}
-
-		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
-			return fmt.Errorf("failed to write CSV: %w", err)
-		}
-
-		fmt.Printf("CSV file created: %s\n", csvFilename)
+		outputFiles, err = writeCSVOutput(result, effectiveOutputDir, writerOpts)
 	} else {
-		// Create NDJSON writer
-		writer := output.NewNDJSONWriter(100 * 1024 * 1024) // 100MB max file size
-		defer writer.Close()
-
-		// Determine output base name with directory
-		outputBaseName := fileutil.GetNDJSONBaseName(inputPath)
-		if outputDir != "" {
-			// Ensure output directory exists
-			if err := fileutil.EnsureDirectoryExists(outputDir); err != nil {
-				return fmt.Errorf("failed to create output directory: %w", err)
-			}
-			outputBaseName = filepath.Join(outputDir, filepath.Base(outputBaseName))
-		}
-
-		// Write credentials to NDJSON
-		writerOpts := output.WriterOptions{
-			MaxFileSize:      100 * 1024 * 1024,
-			OutputBaseName:   outputBaseName,
-			TelegramMetadata: telegramMeta,
-			EnableFreshness:  !noFreshness,
-			NoSplit:          !split,
-		}
-
-		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
-			return fmt.Errorf("failed to write NDJSON: %w", err)
-		}
-
-		if !split {
-			fmt.Printf("NDJSON file created: %s.jsonl\n", outputBaseName)
-		} else {
-			fmt.Printf("NDJSON files created with base name: %s_*.jsonl\n", outputBaseName)
-		}
+		outputFiles, err = writeNDJSONOutput(result, effectiveOutputDir, writerOpts)
 	}
 
-	// Print processing statistics
-	fmt.Fprintf(os.Stderr, "Processed %d total lines\n", result.Stats.TotalLines)
-	fmt.Fprintf(os.Stderr, "Valid credentials: %d\n", result.Stats.ValidCredentials)
-	fmt.Fprintf(os.Stderr, "Duplicates removed: %d\n", result.Stats.DuplicatesFound)
+	if err != nil {
+		return fmt.Errorf("failed to write %s output: %w", outputFormat, err)
+	}
 
+	printStatistics(result, outputFiles, outputFormat)
 	return nil
 }
 
 func processDirectoryFull(processor credential.CredentialProcessor, inputPath string, opts credential.ProcessingOptions) error {
-	fmt.Fprintf(os.Stderr, "Processing directory recursively: %s\n", inputPath)
+	fmt.Fprintf(os.Stderr, "Processing directory: %s\n", inputPath)
 
 	results, err := processor.ProcessDirectory(inputPath, opts)
 	if err != nil {
 		return fmt.Errorf("failed to process directory: %w", err)
 	}
 
+	effectiveOutputDir := outputDir
+	if effectiveOutputDir == "" {
+		effectiveOutputDir = inputPath + "_output"
+	}
+
+	if err := EnsureOutputDirectory(effectiveOutputDir); err != nil {
+		return err
+	}
+
+	totalFiles := 0
+	totalCredentials := 0
+	totalDuplicates := 0
+
 	for filePath, result := range results {
-		fmt.Fprintf(os.Stderr, "Processing file: %s\n", filePath)
+		telegramMeta := ExtractTelegramMetadata(jsonFile, filePath, channelName, channelAt)
 
-		// Extract Telegram metadata for this specific file
-		var telegramMeta *output.TelegramMetadata
-		if jsonFile != "" {
-			extractor := telegram.NewDefaultExtractor()
-			meta, err := extractor.ExtractFromFile(jsonFile, filePath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to extract Telegram metadata for %s: %v\n", filePath, err)
-			} else {
-				telegramMeta = &output.TelegramMetadata{
-					ChannelID:      meta.ID,
-					ChannelName:    getChannelNameFull(meta.Name),
-					ChannelAt:      getChannelAtFull(meta.At),
-					DatePosted:     meta.DatePosted,
-					MessageContent: meta.MessageContent,
-					MessageID:      meta.MessageID,
-				}
-			}
+		relPath := fileutil.GetRelativePath(inputPath, filePath)
+		fileOutputDir := filepath.Join(effectiveOutputDir, filepath.Dir(relPath))
+
+		if err := EnsureOutputDirectory(fileOutputDir); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to create directory %s: %v\n", fileOutputDir, err)
+			continue
 		}
 
-		// Determine output base name with directory
-		outputBaseName := fileutil.GetNDJSONBaseName(filePath)
-		if outputDir != "" {
-			// Preserve directory structure in output
-			relPath := fileutil.GetRelativePath(inputPath, filePath)
-			outputPath := filepath.Join(outputDir, filepath.Dir(relPath))
-			
-			// Ensure output directory exists
-			if err := fileutil.EnsureDirectoryExists(outputPath); err != nil {
-				return fmt.Errorf("failed to create output directory: %w", err)
-			}
-			
-			outputBaseName = filepath.Join(outputPath, filepath.Base(outputBaseName))
-		}
+		outputBaseName := GetOutputBaseName(filePath)
 
-		// Handle different output formats
+		writerOpts := CreateWriterOptions(outputBaseName, telegramMeta, !noFreshness, !split)
+
+		var outputFiles []string
 		if outputFormat == "csv" {
-			csvFilename := outputBaseName + ".csv"
-
-			// Create CSV writer
-			writer, err := output.NewCSVWriter(csvFilename)
-			if err != nil {
-				return fmt.Errorf("failed to create CSV writer for %s: %w", filePath, err)
-			}
-
-			writerOpts := output.WriterOptions{
-				OutputBaseName:   outputBaseName,
-				TelegramMetadata: telegramMeta,
-				EnableFreshness:  false,
-				NoSplit:          true,
-			}
-
-			if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
-				writer.Close()
-				return fmt.Errorf("failed to write CSV for %s: %w", filePath, err)
-			}
-
-			writer.Close()
+			outputFiles, err = writeCSVOutput(result, fileOutputDir, writerOpts)
 		} else {
-			// Create NDJSON writer for this file
-			writer := output.NewNDJSONWriter(100 * 1024 * 1024)
-
-			writerOpts := output.WriterOptions{
-				MaxFileSize:      100 * 1024 * 1024,
-				OutputBaseName:   outputBaseName,
-				TelegramMetadata: telegramMeta,
-				EnableFreshness:  !noFreshness,
-				NoSplit:          !split,
-			}
-
-			if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
-				writer.Close()
-				return fmt.Errorf("failed to write NDJSON for %s: %w", filePath, err)
-			}
-
-			writer.Close()
+			outputFiles, err = writeNDJSONOutput(result, fileOutputDir, writerOpts)
 		}
 
-		// Print processing statistics for this file
-		fmt.Fprintf(os.Stderr, "Processed %d total lines, %d valid credentials, %d duplicates removed\n",
-			result.Stats.TotalLines, result.Stats.ValidCredentials, result.Stats.DuplicatesFound)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write %s output for %s: %v\n", outputFormat, filePath, err)
+			continue
+		}
+
+		totalFiles++
+		totalCredentials += len(result.Credentials)
+		totalDuplicates += len(result.Duplicates)
+
+		fmt.Printf("Processed %s -> %s\n", filePath, outputFiles[0])
 	}
 
-	fmt.Printf("Directory processing completed: %s\n", inputPath)
-	if outputFormat == "csv" {
-		fmt.Printf("CSV files created with .csv suffix for each processed file\n")
-	} else {
-		if !split {
-			fmt.Printf("NDJSON files created with _ms.jsonl suffix for each processed file\n")
-		} else {
-			fmt.Printf("NDJSON files created with _ms_*.jsonl suffix for each processed file\n")
-		}
-	}
+	fmt.Printf("\nDirectory processing completed:\n")
+	fmt.Printf("  Files processed: %d\n", totalFiles)
+	fmt.Printf("  Total credentials: %d\n", totalCredentials)
+	fmt.Printf("  Total duplicates removed: %d\n", totalDuplicates)
+	fmt.Printf("  Output format: %s\n", outputFormat)
+	fmt.Printf("  Output directory: %s\n", effectiveOutputDir)
 
 	return nil
 }
 
-func getChannelNameFull(metaName string) string {
-	if channelName != "" {
-		return channelName
+func writeCSVOutput(result *credential.ProcessingResult, outputDir string, writerOpts output.WriterOptions) ([]string, error) {
+	outputFile := filepath.Join(outputDir, writerOpts.OutputBaseName+"_ms.csv")
+	writer, err := output.NewCSVWriter(outputFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create CSV writer: %w", err)
 	}
-	return metaName
+
+	if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
+		return nil, fmt.Errorf("failed to write credentials: %w", err)
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close CSV writer: %w", err)
+	}
+
+	return []string{outputFile}, nil
 }
 
-func getChannelAtFull(metaAt string) string {
-	if channelAt != "" {
-		return channelAt
+func writeNDJSONOutput(result *credential.ProcessingResult, outputDir string, writerOpts output.WriterOptions) ([]string, error) {
+	writerOpts.OutputBaseName = filepath.Join(outputDir, writerOpts.OutputBaseName)
+
+	writer := output.NewNDJSONWriter(writerOpts.MaxFileSize)
+
+	if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
+		return nil, fmt.Errorf("failed to write credentials: %w", err)
 	}
-	return metaAt
+
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close NDJSON writer: %w", err)
+	}
+
+	var outputFiles []string
+	if writerOpts.NoSplit {
+		outputFiles = append(outputFiles, writerOpts.OutputBaseName+"_ms.jsonl")
+	} else {
+		outputFiles = append(outputFiles, writerOpts.OutputBaseName+"_ms_001.jsonl")
+	}
+
+	return outputFiles, nil
+}
+
+func printStatistics(result *credential.ProcessingResult, outputFiles []string, format string) {
+	fmt.Printf("\nProcessing completed:\n")
+	fmt.Printf("  Total credentials: %d\n", len(result.Credentials))
+	fmt.Printf("  Duplicates removed: %d\n", len(result.Duplicates))
+	fmt.Printf("  Output format: %s\n", format)
+
+	if len(outputFiles) == 1 {
+		fmt.Printf("  Output file: %s\n", outputFiles[0])
+	} else {
+		fmt.Printf("  Output files: %d files created\n", len(outputFiles))
+		for i, file := range outputFiles {
+			fmt.Printf("    [%d] %s\n", i+1, file)
+		}
+	}
+
+	if noFreshness {
+		fmt.Printf("  Freshness scoring: disabled\n")
+	} else {
+		fmt.Printf("  Freshness scoring: enabled\n")
+	}
 }

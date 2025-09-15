@@ -66,3 +66,22 @@ func (n *DefaultURLNormalizer) Normalize(rawURL string) string {
 
 	return normalized
 }
+
+// ExtractNormalizedDomain extracts the domain part for deduplication purposes
+func ExtractNormalizedDomain(url string) string {
+	domain := url
+	
+	// Remove common protocols
+	if len(domain) >= 8 && domain[:8] == "https://" {
+		domain = domain[8:]
+	} else if len(domain) >= 7 && domain[:7] == "http://" {
+		domain = domain[7:]
+	}
+	
+	// Remove www prefix
+	if len(domain) >= 4 && domain[:4] == "www." {
+		domain = domain[4:]
+	}
+	
+	return domain
+}

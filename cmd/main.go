@@ -133,12 +133,7 @@ func processDirectoryMain(processor credential.CredentialProcessor, inputPath, o
 
 		var lines []string
 		for _, cred := range result.Credentials {
-			domain := cred.URL
-			if len(domain) >= 8 && domain[:8] == "https://" {
-				domain = domain[8:]
-			} else if len(domain) >= 7 && domain[:7] == "http://" {
-				domain = domain[7:]
-			}
+			domain := credential.ExtractNormalizedDomain(cred.URL)
 			line := fmt.Sprintf("%s:%s:%s", domain, cred.Username, cred.Password)
 			lines = append(lines, line)
 		}

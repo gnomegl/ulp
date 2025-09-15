@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"github.com/gnomegl/ulp/internal/flags"
 	"github.com/gnomegl/ulp/pkg/credential"
 	"github.com/gnomegl/ulp/pkg/fileutil"
 	"github.com/gnomegl/ulp/pkg/output"
-	"github.com/gnomegl/ulp/pkg/telegram"
 	"github.com/spf13/cobra"
 )
 
 var (
-	glob bool
+	csvCmdFlags flags.CommonFlags
+	glob        bool
 )
 
 var csvCmd = &cobra.Command{
@@ -32,10 +32,8 @@ When processing directories:
 }
 
 func init() {
-	csvCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory for CSV files (default: current directory)")
-	csvCmd.Flags().StringVarP(&jsonFile, "json-file", "j", "", "JSON metadata file (optional)")
-	csvCmd.Flags().StringVarP(&channelName, "channel-name", "c", "", "Telegram channel name (optional)")
-	csvCmd.Flags().StringVarP(&channelAt, "channel-at", "a", "", "Telegram channel @ handle (optional)")
+	flags.AddTelegramFlags(csvCmd, &csvCmdFlags)
+	csvCmd.Flags().StringVarP(&csvCmdFlags.OutputDir, "output-dir", "o", "", "Output directory for CSV files (default: current directory)")
 	csvCmd.Flags().BoolVarP(&glob, "glob", "g", false, "Combine all files from directory into single CSV file")
 
 	rootCmd.AddCommand(csvCmd)
@@ -44,17 +42,17 @@ func init() {
 func runCSV(cmd *cobra.Command, args []string) error {
 	inputPath := args[0]
 
-	if !fileutil.FileExists(inputPath) {
-		return fmt.Errorf("input file or directory '%s' not found", inputPath)
+	if err := ValidateInputFile(inputPath); err != nil {
+		return err
 	}
 
-	outputPath := outputDir
+	outputPath := csvCmdFlags.OutputDir
 	if outputPath == "" {
 		outputPath = "."
 	}
 
-	if err := fileutil.EnsureDirectoryExists(outputPath); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+	if err := EnsureOutputDirectory(outputPath); err != nil {
+		return err
 	}
 
 	processor := credential.NewDefaultProcessor()
@@ -71,43 +69,21 @@ func runCSV(cmd *cobra.Command, args []string) error {
 }
 
 func processFileCSV(processor credential.CredentialProcessor, inputPath, outputPath string) error {
-	// Extract Telegram metadata if JSON file is provided
-	var telegramMeta *output.TelegramMetadata
-	if jsonFile != "" {
-		extractor := telegram.NewDefaultExtractor()
-		meta, err := extractor.ExtractFromFile(jsonFile, inputPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to extract Telegram metadata: %v\n", err)
-		} else {
-			telegramMeta = &output.TelegramMetadata{
-				ChannelID:      meta.ID,
-				ChannelName:    meta.Name,
-				ChannelAt:      meta.At,
-				DatePosted:     meta.DatePosted,
-				MessageContent: meta.MessageContent,
-				MessageID:      meta.MessageID,
-			}
+	telegramMeta := ExtractTelegramMetadata(
+		csvCmdFlags.JsonFile,
+		inputPath,
+		csvCmdFlags.ChannelName,
+		csvCmdFlags.ChannelAt,
+	)
 
-			if channelName != "" {
-				telegramMeta.ChannelName = channelName
-			}
-			if channelAt != "" {
-				telegramMeta.ChannelAt = channelAt
-			}
-		}
-	}
-
-	opts := credential.ProcessingOptions{
-		EnableDeduplication: false,
-		SaveDuplicates:      false,
-	}
+	opts := CreateProcessingOptions(false, false, "")
 
 	result, err := processor.ProcessFile(inputPath, opts)
 	if err != nil {
 		return fmt.Errorf("failed to process file: %w", err)
 	}
 
-	baseName := strings.TrimSuffix(filepath.Base(inputPath), filepath.Ext(inputPath))
+	baseName := GetOutputBaseName(inputPath)
 	csvFilename := filepath.Join(outputPath, baseName+".csv")
 
 	writer, err := output.NewCSVWriter(csvFilename)
@@ -115,13 +91,7 @@ func processFileCSV(processor credential.CredentialProcessor, inputPath, outputP
 		return fmt.Errorf("failed to create CSV writer: %w", err)
 	}
 	defer writer.Close()
-
-	writerOpts := output.WriterOptions{
-		OutputBaseName:   baseName,
-		TelegramMetadata: telegramMeta,
-		EnableFreshness:  false,
-		NoSplit:          true,
-	}
+	writerOpts := CreateWriterOptions(baseName, telegramMeta, false, true)
 
 	if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 		return fmt.Errorf("failed to write CSV: %w", err)
@@ -136,10 +106,7 @@ func processFileCSV(processor credential.CredentialProcessor, inputPath, outputP
 func processDirectoryCSV(processor credential.CredentialProcessor, inputPath, outputPath string) error {
 	fmt.Fprintf(os.Stderr, "Processing directory: %s\n", inputPath)
 
-	opts := credential.ProcessingOptions{
-		EnableDeduplication: false,
-		SaveDuplicates:      false,
-	}
+	opts := CreateProcessingOptions(false, false, "")
 
 	results, err := processor.ProcessDirectory(inputPath, opts)
 	if err != nil {
@@ -148,31 +115,14 @@ func processDirectoryCSV(processor credential.CredentialProcessor, inputPath, ou
 
 	totalCreds := 0
 	for filePath, result := range results {
-		var telegramMeta *output.TelegramMetadata
-		if jsonFile != "" {
-			extractor := telegram.NewDefaultExtractor()
-			meta, err := extractor.ExtractFromFile(jsonFile, filePath)
-			if err == nil {
-				telegramMeta = &output.TelegramMetadata{
-					ChannelID:      meta.ID,
-					ChannelName:    meta.Name,
-					ChannelAt:      meta.At,
-					DatePosted:     meta.DatePosted,
-					MessageContent: meta.MessageContent,
-					MessageID:      meta.MessageID,
-				}
+		telegramMeta := ExtractTelegramMetadata(
+			csvCmdFlags.JsonFile,
+			filePath,
+			csvCmdFlags.ChannelName,
+			csvCmdFlags.ChannelAt,
+		)
 
-				if channelName != "" {
-					telegramMeta.ChannelName = channelName
-				}
-				if channelAt != "" {
-					telegramMeta.ChannelAt = channelAt
-				}
-			}
-		}
-
-		// Generate output filename for this file
-		baseName := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
+		baseName := GetOutputBaseName(filePath)
 		csvFilename := filepath.Join(outputPath, baseName+".csv")
 
 		writer, err := output.NewCSVWriter(csvFilename)
@@ -180,12 +130,7 @@ func processDirectoryCSV(processor credential.CredentialProcessor, inputPath, ou
 			return fmt.Errorf("failed to create CSV writer for %s: %w", filePath, err)
 		}
 
-		writerOpts := output.WriterOptions{
-			OutputBaseName:   baseName,
-			TelegramMetadata: telegramMeta,
-			EnableFreshness:  false,
-			NoSplit:          true,
-		}
+		writerOpts := CreateWriterOptions(baseName, telegramMeta, false, true)
 
 		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 			writer.Close()
@@ -215,10 +160,7 @@ func processDirectoryGlobCSV(processor credential.CredentialProcessor, inputPath
 	}
 	defer writer.Close()
 
-	opts := credential.ProcessingOptions{
-		EnableDeduplication: false,
-		SaveDuplicates:      false,
-	}
+	opts := CreateProcessingOptions(false, false, "")
 
 	results, err := processor.ProcessDirectory(inputPath, opts)
 	if err != nil {
@@ -229,35 +171,19 @@ func processDirectoryGlobCSV(processor credential.CredentialProcessor, inputPath
 	filesProcessed := 0
 
 	for filePath, result := range results {
-		var telegramMeta *output.TelegramMetadata
-		if jsonFile != "" {
-			extractor := telegram.NewDefaultExtractor()
-			meta, err := extractor.ExtractFromFile(jsonFile, filePath)
-			if err == nil {
-				telegramMeta = &output.TelegramMetadata{
-					ChannelID:      meta.ID,
-					ChannelName:    meta.Name,
-					ChannelAt:      meta.At,
-					DatePosted:     meta.DatePosted,
-					MessageContent: meta.MessageContent,
-					MessageID:      meta.MessageID,
-				}
+		telegramMeta := ExtractTelegramMetadata(
+			csvCmdFlags.JsonFile,
+			filePath,
+			csvCmdFlags.ChannelName,
+			csvCmdFlags.ChannelAt,
+		)
 
-				if channelName != "" {
-					telegramMeta.ChannelName = channelName
-				}
-				if channelAt != "" {
-					telegramMeta.ChannelAt = channelAt
-				}
-			}
-		}
-
-		writerOpts := output.WriterOptions{
-			OutputBaseName:   filepath.Base(filePath),
-			TelegramMetadata: telegramMeta,
-			EnableFreshness:  false,
-			NoSplit:          true,
-		}
+		writerOpts := CreateWriterOptions(
+			filepath.Base(filePath),
+			telegramMeta,
+			false,
+			true,
+		)
 
 		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 			return fmt.Errorf("failed to write credentials from %s: %w", filePath, err)
@@ -274,4 +200,3 @@ func processDirectoryGlobCSV(processor credential.CredentialProcessor, inputPath
 
 	return nil
 }
-

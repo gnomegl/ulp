@@ -4,21 +4,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/gnomegl/ulp/internal/command"
+	"github.com/gnomegl/ulp/internal/flags"
 	"github.com/gnomegl/ulp/pkg/credential"
 	"github.com/gnomegl/ulp/pkg/fileutil"
 	"github.com/gnomegl/ulp/pkg/output"
-	"github.com/gnomegl/ulp/pkg/telegram"
 	"github.com/spf13/cobra"
 )
 
 var (
-	jsonFile    string
-	channelName string
-	channelAt   string
-	noFreshness bool
-	split       bool
-	outputDir   string
+	jsonlCmdFlags flags.CommonFlags
+	jsonlBaseCmd  command.BaseCommand
 )
 
 var jsonlCmd = &cobra.Command{
@@ -31,36 +29,30 @@ Processes files or directories recursively and creates NDJSON files with metadat
 }
 
 func init() {
-	jsonlCmd.Flags().StringVarP(&jsonFile, "json-file", "j", "", "JSON metadata file (optional)")
-	jsonlCmd.Flags().StringVarP(&channelName, "channel-name", "c", "", "Telegram channel name (optional)")
-	jsonlCmd.Flags().StringVarP(&channelAt, "channel-at", "a", "", "Telegram channel @ handle (optional)")
-	jsonlCmd.Flags().BoolVar(&noFreshness, "no-freshness", false, "Disable freshness scoring")
-	jsonlCmd.Flags().BoolVarP(&split, "split", "s", false, "Enable file splitting at 100MB (default: single file)")
-	jsonlCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory for JSONL files (defaults to input file's directory)")
+	flags.AddTelegramFlags(jsonlCmd, &jsonlCmdFlags)
+	flags.AddOutputFlags(jsonlCmd, &jsonlCmdFlags)
 	rootCmd.AddCommand(jsonlCmd)
 }
 
 func runJSONL(cmd *cobra.Command, args []string) error {
 	inputPath := args[0]
 
-	if !fileutil.FileExists(inputPath) {
-		return fmt.Errorf("input file or directory '%s' not found", inputPath)
+	if err := ValidateInputFile(inputPath); err != nil {
+		return err
 	}
 
-	// Auto-detect JSON file if not provided and input is a directory
-	if jsonFile == "" && fileutil.IsDirectory(inputPath) {
-		extractor := telegram.NewDefaultExtractor()
-		if autoJSON, err := extractor.AutoDetectJSONFile(inputPath); err == nil {
-			jsonFile = autoJSON
-			fmt.Fprintf(os.Stderr, "Auto-detected JSON file: %s\n", autoJSON)
+	if jsonlCmdFlags.JsonFile == "" && !fileutil.IsDirectory(inputPath) {
+		dir := filepath.Dir(inputPath)
+		base := filepath.Base(inputPath)
+		possibleJSON := filepath.Join(dir, strings.TrimSuffix(base, filepath.Ext(base))+".json")
+		if fileutil.FileExists(possibleJSON) {
+			jsonlCmdFlags.JsonFile = possibleJSON
+			fmt.Fprintf(os.Stderr, "Auto-detected JSON file: %s\n", possibleJSON)
 		}
 	}
 
 	processor := credential.NewDefaultProcessor()
-	opts := credential.ProcessingOptions{
-		EnableDeduplication: true, // Enable deduplication for JSONL output
-		SaveDuplicates:      false,
-	}
+	opts := CreateProcessingOptions(true, false, "")
 
 	if fileutil.IsDirectory(inputPath) {
 		return processDirectoryJSONL(processor, inputPath, opts)
@@ -77,49 +69,38 @@ func processFileJSONL(processor credential.CredentialProcessor, inputPath string
 		return fmt.Errorf("failed to process file: %w", err)
 	}
 
-	// Extract Telegram metadata if JSON file is provided
-	var telegramMeta *output.TelegramMetadata
-	if jsonFile != "" {
-		extractor := telegram.NewDefaultExtractor()
-		meta, err := extractor.ExtractFromFile(jsonFile, inputPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to extract Telegram metadata: %v\n", err)
-		} else {
-			telegramMeta = &output.TelegramMetadata{
-				ChannelID:      meta.ID,
-				ChannelName:    getChannelName(meta.Name),
-				ChannelAt:      getChannelAt(meta.At),
-				DatePosted:     meta.DatePosted,
-				MessageContent: meta.MessageContent,
-				MessageID:      meta.MessageID,
-			}
-		}
-	}
+	telegramMeta := ExtractTelegramMetadata(
+		jsonlCmdFlags.JsonFile,
+		inputPath,
+		jsonlCmdFlags.ChannelName,
+		jsonlCmdFlags.ChannelAt,
+	)
 
-	writer := output.NewNDJSONWriter(100 * 1024 * 1024) // 100MB max file size
+	writer := output.NewNDJSONWriter(100 * 1024 * 1024)
 	defer writer.Close()
 
-	outputBaseName := fileutil.GetNDJSONBaseName(inputPath)
-	if outputDir != "" {
-		if err := fileutil.EnsureDirectoryExists(outputDir); err != nil {
-			return fmt.Errorf("failed to create output directory: %w", err)
+	outputBaseName := GetOutputBaseName(inputPath)
+	outputBaseName = outputBaseName + "_ms"
+
+	if jsonlCmdFlags.OutputDir != "" {
+		if err := EnsureOutputDirectory(jsonlCmdFlags.OutputDir); err != nil {
+			return err
 		}
-		outputBaseName = filepath.Join(outputDir, filepath.Base(outputBaseName))
+		outputBaseName = filepath.Join(jsonlCmdFlags.OutputDir, filepath.Base(outputBaseName))
 	}
 
-	writerOpts := output.WriterOptions{
-		MaxFileSize:      100 * 1024 * 1024,
-		OutputBaseName:   outputBaseName,
-		TelegramMetadata: telegramMeta,
-		EnableFreshness:  !noFreshness,
-		NoSplit:          !split,
-	}
+	writerOpts := CreateWriterOptions(
+		outputBaseName,
+		telegramMeta,
+		!jsonlCmdFlags.NoFreshness,
+		!jsonlCmdFlags.Split,
+	)
 
 	if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 		return fmt.Errorf("failed to write NDJSON: %w", err)
 	}
 
-	if !split {
+	if !jsonlCmdFlags.Split {
 		fmt.Printf("NDJSON file created: %s.jsonl\n", outputBaseName)
 	} else {
 		fmt.Printf("NDJSON files created with base name: %s_*.jsonl\n", outputBaseName)
@@ -139,46 +120,35 @@ func processDirectoryJSONL(processor credential.CredentialProcessor, inputPath s
 	for filePath, result := range results {
 		fmt.Fprintf(os.Stderr, "Processing file: %s\n", filePath)
 
-		var telegramMeta *output.TelegramMetadata
-		if jsonFile != "" {
-			extractor := telegram.NewDefaultExtractor()
-			meta, err := extractor.ExtractFromFile(jsonFile, filePath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to extract Telegram metadata for %s: %v\n", filePath, err)
-			} else {
-				telegramMeta = &output.TelegramMetadata{
-					ChannelID:      meta.ID,
-					ChannelName:    getChannelName(meta.Name),
-					ChannelAt:      getChannelAt(meta.At),
-					DatePosted:     meta.DatePosted,
-					MessageContent: meta.MessageContent,
-					MessageID:      meta.MessageID,
-				}
-			}
-		}
+		telegramMeta := ExtractTelegramMetadata(
+			jsonlCmdFlags.JsonFile,
+			filePath,
+			jsonlCmdFlags.ChannelName,
+			jsonlCmdFlags.ChannelAt,
+		)
 
-		outputBaseName := fileutil.GetNDJSONBaseName(filePath)
-		if outputDir != "" {
+		outputBaseName := GetOutputBaseName(filePath)
+		outputBaseName = outputBaseName + "_ms"
+
+		if jsonlCmdFlags.OutputDir != "" {
 			relPath := fileutil.GetRelativePath(inputPath, filePath)
-			outputPath := filepath.Join(outputDir, filepath.Dir(relPath))
+			outputPath := filepath.Join(jsonlCmdFlags.OutputDir, filepath.Dir(relPath))
 
-			if err := fileutil.EnsureDirectoryExists(outputPath); err != nil {
-				return fmt.Errorf("failed to create output directory: %w", err)
+			if err := EnsureOutputDirectory(outputPath); err != nil {
+				return err
 			}
 
 			outputBaseName = filepath.Join(outputPath, filepath.Base(outputBaseName))
 		}
 
-		// Create NDJSON writer for this file
 		writer := output.NewNDJSONWriter(100 * 1024 * 1024)
 
-		writerOpts := output.WriterOptions{
-			MaxFileSize:      100 * 1024 * 1024,
-			OutputBaseName:   outputBaseName,
-			TelegramMetadata: telegramMeta,
-			EnableFreshness:  !noFreshness,
-			NoSplit:          !split,
-		}
+		writerOpts := CreateWriterOptions(
+			outputBaseName,
+			telegramMeta,
+			!jsonlCmdFlags.NoFreshness,
+			!jsonlCmdFlags.Split,
+		)
 
 		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 			writer.Close()
@@ -189,25 +159,11 @@ func processDirectoryJSONL(processor credential.CredentialProcessor, inputPath s
 	}
 
 	fmt.Printf("Directory processing completed: %s\n", inputPath)
-	if !split {
+	if !jsonlCmdFlags.Split {
 		fmt.Printf("NDJSON files created with _ms.jsonl suffix for each processed file\n")
 	} else {
 		fmt.Printf("NDJSON files created with _ms_*.jsonl suffix for each processed file\n")
 	}
 
 	return nil
-}
-
-func getChannelName(metaName string) string {
-	if channelName != "" {
-		return channelName
-	}
-	return metaName
-}
-
-func getChannelAt(metaAt string) string {
-	if channelAt != "" {
-		return channelAt
-	}
-	return metaAt
 }
