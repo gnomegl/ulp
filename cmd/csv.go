@@ -15,6 +15,7 @@ import (
 var (
 	csvCmdFlags flags.CommonFlags
 	glob        bool
+	csvStdout   bool
 )
 
 var csvCmd = &cobra.Command{
@@ -35,6 +36,7 @@ func init() {
 	flags.AddTelegramFlags(csvCmd, &csvCmdFlags)
 	csvCmd.Flags().StringVarP(&csvCmdFlags.OutputDir, "output-dir", "o", "", "Output directory for CSV files (default: current directory)")
 	csvCmd.Flags().BoolVarP(&glob, "glob", "g", false, "Combine all files from directory into single CSV file")
+	csvCmd.Flags().BoolVar(&csvStdout, "stdout", false, "Output to stdout instead of file")
 
 	rootCmd.AddCommand(csvCmd)
 }
@@ -44,6 +46,11 @@ func runCSV(cmd *cobra.Command, args []string) error {
 
 	if err := ValidateInputFile(inputPath); err != nil {
 		return err
+	}
+
+	// If stdout is enabled, process differently
+	if csvStdout {
+		return processToStdout(inputPath, "csv")
 	}
 
 	outputPath := csvCmdFlags.OutputDir
@@ -98,7 +105,7 @@ func processFileCSV(processor credential.CredentialProcessor, inputPath, outputP
 	}
 
 	fmt.Fprintf(os.Stderr, "Created CSV file: %s\n", csvFilename)
-	fmt.Printf("Total credentials: %d\n", len(result.Credentials))
+	fmt.Fprintf(os.Stderr, "Total credentials: %d\n", len(result.Credentials))
 
 	return nil
 }
@@ -142,8 +149,8 @@ func processDirectoryCSV(processor credential.CredentialProcessor, inputPath, ou
 		totalCreds += len(result.Credentials)
 	}
 
-	fmt.Printf("Total files processed: %d\n", len(results))
-	fmt.Printf("Total credentials: %d\n", totalCreds)
+	fmt.Fprintf(os.Stderr, "Total files processed: %d\n", len(results))
+	fmt.Fprintf(os.Stderr, "Total credentials: %d\n", totalCreds)
 
 	return nil
 }
@@ -195,8 +202,8 @@ func processDirectoryGlobCSV(processor credential.CredentialProcessor, inputPath
 	}
 
 	fmt.Fprintf(os.Stderr, "Created combined CSV file: %s\n", csvFilename)
-	fmt.Printf("Total files processed: %d\n", filesProcessed)
-	fmt.Printf("Total credentials: %d\n", totalCreds)
+	fmt.Fprintf(os.Stderr, "Total files processed: %d\n", filesProcessed)
+	fmt.Fprintf(os.Stderr, "Total credentials: %d\n", totalCreds)
 
 	return nil
 }

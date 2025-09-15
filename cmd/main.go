@@ -103,14 +103,14 @@ func processFileMain(processor credential.CredentialProcessor, inputPath, output
 		return fmt.Errorf("failed to write output file: %w", err)
 	}
 
-	fmt.Printf("Processed file: %s\n", outputPath)
+	fmt.Fprintf(os.Stderr, "Processed file: %s\n", outputPath)
 	if opts.SaveDuplicates && opts.DuplicatesFile != "" {
-		fmt.Printf("Duplicate lines saved to: %s\n", opts.DuplicatesFile)
-		fmt.Printf("Total duplicates removed: %d\n", len(result.Duplicates))
+		fmt.Fprintf(os.Stderr, "Duplicate lines saved to: %s\n", opts.DuplicatesFile)
+		fmt.Fprintf(os.Stderr, "Total duplicates removed: %d\n", len(result.Duplicates))
 	} else if opts.EnableDeduplication {
-		fmt.Printf("Duplicates removed (use --dupes-file to save duplicates to a file)\n")
+		fmt.Fprintf(os.Stderr, "Duplicates removed (use --dupes-file to save duplicates to a file)\n")
 	}
-	fmt.Printf("Lines not matching format were ignored\n")
+	fmt.Fprintf(os.Stderr, "Lines not matching format were ignored\n")
 
 	return nil
 }
@@ -143,8 +143,8 @@ func processDirectoryMain(processor credential.CredentialProcessor, inputPath, o
 		}
 	}
 
-	fmt.Printf("Directory processing completed: %s -> %s\n", inputPath, outputPath)
-	fmt.Printf("Lines not matching format were ignored\n")
+	fmt.Fprintf(os.Stderr, "Directory processing completed: %s -> %s\n", inputPath, outputPath)
+	fmt.Fprintf(os.Stderr, "Lines not matching format were ignored\n")
 
 	return nil
 }

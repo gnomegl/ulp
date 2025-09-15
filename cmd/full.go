@@ -14,6 +14,7 @@ import (
 
 var (
 	outputFormat string
+	fullStdout   bool
 )
 
 var fullCmd = &cobra.Command{
@@ -34,6 +35,7 @@ func init() {
 	fullCmd.Flags().BoolVarP(&split, "split", "s", false, "Enable file splitting at 100MB (default: single file)")
 	fullCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory for files (defaults to input file's directory)")
 	fullCmd.Flags().StringVarP(&outputFormat, "format", "f", "txt", "Output format: txt, jsonl, or csv (default: txt)")
+	fullCmd.Flags().BoolVar(&fullStdout, "stdout", false, "Output to stdout instead of file")
 	rootCmd.AddCommand(fullCmd)
 }
 
@@ -42,6 +44,11 @@ func runFull(cmd *cobra.Command, args []string) error {
 
 	if err := ValidateInputFile(inputPath); err != nil {
 		return err
+	}
+
+	// If stdout is enabled, process differently
+	if fullStdout {
+		return processToStdout(inputPath, outputFormat)
 	}
 
 	if jsonFile == "" && fileutil.IsDirectory(inputPath) {
@@ -157,15 +164,15 @@ func processDirectoryFull(processor credential.CredentialProcessor, inputPath st
 		totalCredentials += len(result.Credentials)
 		totalDuplicates += len(result.Duplicates)
 
-		fmt.Printf("Processed %s -> %s\n", filePath, outputFiles[0])
+		fmt.Fprintf(os.Stderr, "Processed %s -> %s\n", filePath, outputFiles[0])
 	}
 
-	fmt.Printf("\nDirectory processing completed:\n")
-	fmt.Printf("  Files processed: %d\n", totalFiles)
-	fmt.Printf("  Total credentials: %d\n", totalCredentials)
-	fmt.Printf("  Total duplicates removed: %d\n", totalDuplicates)
-	fmt.Printf("  Output format: %s\n", outputFormat)
-	fmt.Printf("  Output directory: %s\n", effectiveOutputDir)
+	fmt.Fprintf(os.Stderr, "\nDirectory processing completed:\n")
+	fmt.Fprintf(os.Stderr, "  Files processed: %d\n", totalFiles)
+	fmt.Fprintf(os.Stderr, "  Total credentials: %d\n", totalCredentials)
+	fmt.Fprintf(os.Stderr, "  Total duplicates removed: %d\n", totalDuplicates)
+	fmt.Fprintf(os.Stderr, "  Output format: %s\n", outputFormat)
+	fmt.Fprintf(os.Stderr, "  Output directory: %s\n", effectiveOutputDir)
 
 	return nil
 }
@@ -230,23 +237,23 @@ func writeNDJSONOutput(result *credential.ProcessingResult, outputDir string, wr
 }
 
 func printStatistics(result *credential.ProcessingResult, outputFiles []string, format string) {
-	fmt.Printf("\nProcessing completed:\n")
-	fmt.Printf("  Total credentials: %d\n", len(result.Credentials))
-	fmt.Printf("  Duplicates removed: %d\n", len(result.Duplicates))
-	fmt.Printf("  Output format: %s\n", format)
+	fmt.Fprintf(os.Stderr, "\nProcessing completed:\n")
+	fmt.Fprintf(os.Stderr, "  Total credentials: %d\n", len(result.Credentials))
+	fmt.Fprintf(os.Stderr, "  Duplicates removed: %d\n", len(result.Duplicates))
+	fmt.Fprintf(os.Stderr, "  Output format: %s\n", format)
 
 	if len(outputFiles) == 1 {
-		fmt.Printf("  Output file: %s\n", outputFiles[0])
+		fmt.Fprintf(os.Stderr, "  Output file: %s\n", outputFiles[0])
 	} else {
-		fmt.Printf("  Output files: %d files created\n", len(outputFiles))
+		fmt.Fprintf(os.Stderr, "  Output files: %d files created\n", len(outputFiles))
 		for i, file := range outputFiles {
-			fmt.Printf("    [%d] %s\n", i+1, file)
+			fmt.Fprintf(os.Stderr, "    [%d] %s\n", i+1, file)
 		}
 	}
 
 	if noFreshness {
-		fmt.Printf("  Freshness scoring: disabled\n")
+		fmt.Fprintf(os.Stderr, "  Freshness scoring: disabled\n")
 	} else {
-		fmt.Printf("  Freshness scoring: enabled\n")
+		fmt.Fprintf(os.Stderr, "  Freshness scoring: enabled\n")
 	}
 }

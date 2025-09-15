@@ -15,6 +15,7 @@ import (
 var (
 	txtCmdFlags flags.CommonFlags
 	txtGlob     bool
+	txtStdout   bool
 )
 
 var txtCmd = &cobra.Command{
@@ -37,6 +38,7 @@ func init() {
 	flags.AddTelegramFlags(txtCmd, &txtCmdFlags)
 	txtCmd.Flags().StringVarP(&txtCmdFlags.OutputDir, "output-dir", "o", "", "Output directory for text files (default: current directory)")
 	txtCmd.Flags().BoolVarP(&txtGlob, "glob", "g", false, "Combine all files from directory into single text file")
+	txtCmd.Flags().BoolVar(&txtStdout, "stdout", false, "Output to stdout instead of file")
 
 	rootCmd.AddCommand(txtCmd)
 }
@@ -46,6 +48,11 @@ func runTxt(cmd *cobra.Command, args []string) error {
 
 	if err := ValidateInputFile(inputPath); err != nil {
 		return err
+	}
+
+	// If stdout is enabled, process differently
+	if txtStdout {
+		return processToStdout(inputPath, "txt")
 	}
 
 	outputPath := txtCmdFlags.OutputDir
@@ -100,7 +107,7 @@ func processFileTxt(processor credential.CredentialProcessor, inputPath, outputP
 	}
 
 	fmt.Fprintf(os.Stderr, "Created text file: %s\n", txtFilename)
-	fmt.Printf("Total credentials: %d\n", len(result.Credentials))
+	fmt.Fprintf(os.Stderr, "Total credentials: %d\n", len(result.Credentials))
 
 	return nil
 }
@@ -144,8 +151,8 @@ func processDirectoryTxt(processor credential.CredentialProcessor, inputPath, ou
 		totalCreds += len(result.Credentials)
 	}
 
-	fmt.Printf("Total files processed: %d\n", len(results))
-	fmt.Printf("Total credentials: %d\n", totalCreds)
+	fmt.Fprintf(os.Stderr, "Total files processed: %d\n", len(results))
+	fmt.Fprintf(os.Stderr, "Total credentials: %d\n", totalCreds)
 
 	return nil
 }
@@ -197,8 +204,8 @@ func processDirectoryGlobTxt(processor credential.CredentialProcessor, inputPath
 	}
 
 	fmt.Fprintf(os.Stderr, "Created combined text file: %s\n", txtFilename)
-	fmt.Printf("Total files processed: %d\n", filesProcessed)
-	fmt.Printf("Total credentials: %d\n", totalCreds)
+	fmt.Fprintf(os.Stderr, "Total files processed: %d\n", filesProcessed)
+	fmt.Fprintf(os.Stderr, "Total credentials: %d\n", totalCreds)
 
 	return nil
 }

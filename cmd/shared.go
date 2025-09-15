@@ -126,11 +126,11 @@ func PrintProcessingStatus(inputPath, outputPath string) {
 }
 
 func PrintCompletionStatus(outputPath string) {
-	fmt.Printf("Completed: %s\n", outputPath)
+	fmt.Fprintf(os.Stderr, "Completed: %s\n", outputPath)
 }
 
 func PrintIgnoredLinesWarning() {
-	fmt.Printf("Lines not matching the expected format were ignored\n")
+	fmt.Fprintf(os.Stderr, "Lines not matching the expected format were ignored\n")
 }
 
 func GetOutputBaseName(inputPath string) string {
@@ -218,4 +218,47 @@ func CreateProcessingOptions(enableDedup, saveDupes bool, dupesFile string) cred
 		SaveDuplicates:      saveDupes,
 		DuplicatesFile:      dupesFile,
 	}
+}
+
+func processToStdout(inputPath, format string) error {
+	processor := credential.NewDefaultProcessor()
+	opts := CreateProcessingOptions(true, false, "")
+
+	var allCredentials []credential.Credential
+	var stats credential.ProcessingStats
+
+	if fileutil.IsDirectory(inputPath) {
+		results, err := processor.ProcessDirectory(inputPath, opts)
+		if err != nil {
+			return fmt.Errorf("failed to process directory: %w", err)
+		}
+
+		for _, result := range results {
+			allCredentials = append(allCredentials, result.Credentials...)
+			stats.TotalLines += result.Stats.TotalLines
+			stats.ValidCredentials += result.Stats.ValidCredentials
+			stats.DuplicatesFound += result.Stats.DuplicatesFound
+			stats.LinesIgnored += result.Stats.LinesIgnored
+		}
+	} else {
+		result, err := processor.ProcessFile(inputPath, opts)
+		if err != nil {
+			return fmt.Errorf("failed to process file: %w", err)
+		}
+		allCredentials = result.Credentials
+		stats = result.Stats
+	}
+
+	// Create stdout writer
+	writer := output.NewStdoutWriter(format)
+	writerOpts := output.WriterOptions{
+		OutputBaseName:  GetOutputBaseName(inputPath),
+		EnableFreshness: false,
+	}
+
+	if err := writer.WriteCredentials(allCredentials, stats, writerOpts); err != nil {
+		return fmt.Errorf("failed to write to stdout: %w", err)
+	}
+
+	return writer.Close()
 }

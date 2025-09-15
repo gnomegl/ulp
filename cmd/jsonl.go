@@ -17,6 +17,7 @@ import (
 var (
 	jsonlCmdFlags flags.CommonFlags
 	jsonlBaseCmd  command.BaseCommand
+	jsonlStdout   bool
 )
 
 var jsonlCmd = &cobra.Command{
@@ -31,6 +32,7 @@ Processes files or directories recursively and creates NDJSON files with metadat
 func init() {
 	flags.AddTelegramFlags(jsonlCmd, &jsonlCmdFlags)
 	flags.AddOutputFlags(jsonlCmd, &jsonlCmdFlags)
+	jsonlCmd.Flags().BoolVar(&jsonlStdout, "stdout", false, "Output to stdout instead of file")
 	rootCmd.AddCommand(jsonlCmd)
 }
 
@@ -39,6 +41,11 @@ func runJSONL(cmd *cobra.Command, args []string) error {
 
 	if err := ValidateInputFile(inputPath); err != nil {
 		return err
+	}
+
+	// If stdout is enabled, process differently
+	if jsonlStdout {
+		return processToStdout(inputPath, "jsonl")
 	}
 
 	if jsonlCmdFlags.JsonFile == "" && !fileutil.IsDirectory(inputPath) {
@@ -101,9 +108,9 @@ func processFileJSONL(processor credential.CredentialProcessor, inputPath string
 	}
 
 	if !jsonlCmdFlags.Split {
-		fmt.Printf("NDJSON file created: %s.jsonl\n", outputBaseName)
+		fmt.Fprintf(os.Stderr, "NDJSON file created: %s.jsonl\n", outputBaseName)
 	} else {
-		fmt.Printf("NDJSON files created with base name: %s_*.jsonl\n", outputBaseName)
+		fmt.Fprintf(os.Stderr, "NDJSON files created with base name: %s_*.jsonl\n", outputBaseName)
 	}
 
 	return nil
@@ -165,11 +172,11 @@ func processDirectoryJSONL(processor credential.CredentialProcessor, inputPath s
 	}
 
 	fmt.Fprintf(os.Stderr, "\n=== Processing completed ===\n")
-	fmt.Printf("Successfully processed %d files from: %s\n", totalCount, inputPath)
+	fmt.Fprintf(os.Stderr, "Successfully processed %d files from: %s\n", totalCount, inputPath)
 	if !jsonlCmdFlags.Split {
-		fmt.Printf("NDJSON files created with _ms.jsonl suffix for each processed file\n")
+		fmt.Fprintf(os.Stderr, "NDJSON files created with _ms.jsonl suffix for each processed file\n")
 	} else {
-		fmt.Printf("NDJSON files created with _ms_*.jsonl suffix for each processed file\n")
+		fmt.Fprintf(os.Stderr, "NDJSON files created with _ms_*.jsonl suffix for each processed file\n")
 	}
 
 	return nil
