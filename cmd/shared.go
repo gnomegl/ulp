@@ -228,15 +228,39 @@ func processToStdout(inputPath, format string) error {
 	writer := output.NewStdoutWriter(format)
 
 	if fileutil.IsDirectory(inputPath) {
-		results, err := processor.ProcessDirectory(inputPath, opts)
-		if err != nil {
-			return fmt.Errorf("failed to process directory: %w", err)
-		}
+		// Walk through directory and process each file immediately
+		err := filepath.Walk(inputPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: error accessing path %s: %v\n", path, err)
+				return nil // Continue walking
+			}
 
-		// Process and output each file result immediately
-		for filePath, result := range results {
+			// Skip directories
+			if info.IsDir() {
+				return nil
+			}
+
+			// Skip binary files
+			isBinary, err := fileutil.IsBinaryFile(path)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to check if file is binary %s: %v\n", path, err)
+				return nil // Continue walking
+			}
+			if isBinary {
+				fmt.Fprintf(os.Stderr, "Skipping binary file: %s\n", path)
+				return nil // Continue walking
+			}
+
+			// Process the file
+			result, err := processor.ProcessFile(path, opts)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to process file %s: %v\n", path, err)
+				return nil // Continue walking
+			}
+
+			// Write results immediately
 			writerOpts := output.WriterOptions{
-				OutputBaseName:  GetOutputBaseName(filePath),
+				OutputBaseName:  GetOutputBaseName(path),
 				EnableFreshness: false,
 			}
 
@@ -248,6 +272,12 @@ func processToStdout(inputPath, format string) error {
 			if err := writer.Flush(); err != nil {
 				return fmt.Errorf("failed to flush stdout: %w", err)
 			}
+
+			return nil
+		})
+
+		if err != nil {
+			return fmt.Errorf("failed to walk directory: %w", err)
 		}
 	} else {
 		result, err := processor.ProcessFile(inputPath, opts)
