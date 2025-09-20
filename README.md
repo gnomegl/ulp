@@ -4,6 +4,7 @@ A high-performance credentials file processing tool with proper separation of co
 
 ## Features
 
+- **Multithreaded Processing**: Concurrent processing with configurable worker threads for 2-3x performance improvement
 - **Credential Processing**: Clean and normalize domain formats from credential files
 - **Deduplication**: Remove duplicate entries with optional duplicate output file
 - **Multiple Output Formats**: TXT (default), NDJSON/JSONL, and CSV output formats
@@ -11,7 +12,7 @@ A high-performance credentials file processing tool with proper separation of co
 - **Freshness Scoring**: Calculate quality scores based on duplicate percentage, file size, and age
 - **Telegram Integration**: Process Telegram channel metadata when available
 - **Multiple Input Formats**: Handle URL:user:pass, domain:user:pass, pipe-separated formats
-- **Directory Processing**: Recursively process entire directory structures
+- **Directory Processing**: Recursively process entire directory structures with parallel file processing
 - **File Splitting**: Optional splitting of large NDJSON files at 100MB for optimal indexing
 
 ## Installation
@@ -61,6 +62,10 @@ go install github.com/gnomegl/ulp@latest
 ### Advanced Options
 
 ```bash
+# Specify number of worker threads (default: auto-detect CPU cores)
+./ulp clean input.txt output.txt -w 8
+./ulp full large_file.txt --workers 4
+
 # With Telegram metadata
 ./ulp full input.txt --json-file channel_export.json --channel-name "example" --channel-at "@example"
 
@@ -74,13 +79,30 @@ go install github.com/gnomegl/ulp@latest
 ./ulp jsonl input.txt -o /path/to/output/
 ./ulp full input.txt --output-dir /custom/output/
 
-# Process directory with custom output location
-./ulp jsonl /path/to/input/dir/ -o /path/to/output/dir/
+# Process directory with custom output location and parallel processing
+./ulp jsonl /path/to/input/dir/ -o /path/to/output/dir/ -w 8
 
 # Enable file splitting at 100MB (default is single file)
 ./ulp jsonl large_input.txt --split
 ./ulp full large_input.txt -s
 ```
+
+### Multithreading
+
+ULP supports concurrent processing for improved performance:
+
+```bash
+# Auto-detect optimal worker count (default)
+./ulp clean input.txt output.txt
+
+# Use specific number of workers
+./ulp clean input.txt output.txt --workers 4
+
+# Process directory with 8 parallel workers
+./ulp full /path/to/directory/ -w 8
+```
+
+See [MULTITHREADING.md](MULTITHREADING.md) for detailed performance benchmarks and usage.
 
 ## Architecture
 
@@ -91,9 +113,10 @@ The Go version is structured with proper separation of concerns:
 ```
 pkg/
 ├── credential/     # Core credential processing logic
-│   ├── types.go           # Data structures and interfaces
-│   ├── normalizer.go      # URL normalization logic
-│   └── processor.go       # Main processing implementation
+│   ├── types.go                # Data structures and interfaces
+│   ├── normalizer.go           # URL normalization logic
+│   ├── processor.go            # Default processing implementation
+│   └── concurrent_processor.go # Multithreaded processor
 ├── freshness/      # Freshness scoring algorithm
 │   ├── types.go           # Scoring configuration and structures
 │   └── calculator.go      # Score calculation implementation

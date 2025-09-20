@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/gnomegl/ulp/pkg/credential"
-	"github.com/gnomegl/ulp/pkg/freshness"
 )
 
 // generateNDJSONDocID creates a hash from the cleaned username, url, and password
@@ -22,7 +21,6 @@ func generateNDJSONDocID(username, url, password string) string {
 
 type NDJSONWriter struct {
 	fileManager   *NDJSONFileManager
-	freshnessCalc freshness.Calculator
 	currentWriter *bufio.Writer
 	currentFile   *os.File
 }
@@ -37,9 +35,7 @@ type NDJSONFileManager struct {
 }
 
 func NewNDJSONWriter(maxFileSize int64) *NDJSONWriter {
-	return &NDJSONWriter{
-		freshnessCalc: freshness.NewDefaultCalculator(),
-	}
+	return &NDJSONWriter{}
 }
 
 func (w *NDJSONWriter) WriteCredentials(credentials []credential.Credential, stats credential.ProcessingStats, opts WriterOptions) error {
@@ -60,30 +56,13 @@ func (w *NDJSONWriter) WriteCredentials(credentials []credential.Credential, sta
 	w.currentFile = w.fileManager.currentFile
 	w.currentWriter = bufio.NewWriter(w.currentFile)
 
-	// Calculate freshness score if enabled
-	var freshnessScore *freshness.Score
-	if opts.EnableFreshness {
-		var fileDate *time.Time
-		if opts.TelegramMetadata != nil && opts.TelegramMetadata.DatePosted != nil {
-			fileDate = opts.TelegramMetadata.DatePosted
-		}
-
-		freshnessScore = w.freshnessCalc.Calculate(
-			stats.TotalLines,
-			stats.ValidCredentials,
-			stats.DuplicatesFound,
-			fileDate,
-			0, // File size bytes - could be calculated if needed
-		)
-	}
-
 	// Write each credential as NDJSON
 	for _, cred := range credentials {
 		// Generate doc_id from cleaned credentials
 		docID := generateNDJSONDocID(cred.Username, cred.URL, cred.Password)
 
 		// Create document with metadata
-		doc := w.createDocument(cred, opts, freshnessScore)
+		doc := w.createDocument(cred, opts)
 
 		// Create output structure with doc_id
 		output := map[string]interface{}{
@@ -97,25 +76,14 @@ func (w *NDJSONWriter) WriteCredentials(credentials []credential.Credential, sta
 		if doc.Channel != "" {
 			output["channel"] = doc.Channel
 		}
-		if doc.Date != "" {
-			output["date"] = doc.Date
-		}
 
-		// Add metadata
+		// Add metadata - only include original_filename and date_posted
 		metadata := Metadata{
 			OriginalFilename: opts.OutputBaseName,
-			Freshness:        freshnessScore,
 		}
 
-		if opts.TelegramMetadata != nil {
-			metadata.TelegramChannelID = opts.TelegramMetadata.ChannelID
-			metadata.TelegramChannelName = opts.TelegramMetadata.ChannelName
-			metadata.TelegramChannelAt = opts.TelegramMetadata.ChannelAt
-			metadata.MessageContent = opts.TelegramMetadata.MessageContent
-			metadata.MessageID = opts.TelegramMetadata.MessageID
-			if opts.TelegramMetadata.DatePosted != nil {
-				metadata.DatePosted = opts.TelegramMetadata.DatePosted.Format(time.RFC3339)
-			}
+		if opts.TelegramMetadata != nil && opts.TelegramMetadata.DatePosted != nil {
+			metadata.DatePosted = opts.TelegramMetadata.DatePosted.Format(time.RFC3339)
 		}
 
 		output["metadata"] = metadata
@@ -162,7 +130,7 @@ func (w *NDJSONWriter) WriteCredentials(credentials []credential.Credential, sta
 	return nil
 }
 
-func (w *NDJSONWriter) createDocument(cred credential.Credential, opts WriterOptions, freshnessScore *freshness.Score) Document {
+func (w *NDJSONWriter) createDocument(cred credential.Credential, opts WriterOptions) Document {
 	doc := Document{
 		Username: cred.Username,
 		Password: cred.Password,
@@ -171,9 +139,6 @@ func (w *NDJSONWriter) createDocument(cred credential.Credential, opts WriterOpt
 
 	if opts.TelegramMetadata != nil {
 		doc.Channel = opts.TelegramMetadata.ChannelName
-		if opts.TelegramMetadata.DatePosted != nil {
-			doc.Date = opts.TelegramMetadata.DatePosted.Format(time.RFC3339)
-		}
 	}
 
 	return doc

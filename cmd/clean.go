@@ -31,7 +31,7 @@ func runClean(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	processor := credential.NewDefaultProcessor()
+	processor := credential.NewConcurrentProcessor(workers)
 	opts := CreateProcessingOptions(false, false, "")
 
 	if fileutil.IsDirectory(inputPath) {

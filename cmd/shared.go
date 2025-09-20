@@ -221,7 +221,7 @@ func CreateProcessingOptions(enableDedup, saveDupes bool, dupesFile string) cred
 }
 
 func processToStdout(inputPath, format string) error {
-	processor := credential.NewDefaultProcessor()
+	processor := credential.NewConcurrentProcessor(workers)
 	opts := CreateProcessingOptions(true, false, "")
 
 	// Create stdout writer once

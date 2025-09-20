@@ -49,18 +49,23 @@ func (e *DefaultExtractor) ExtractFromExport(export *ChannelExport, filename str
 	}
 
 	// Try to find matching message by message ID in filename first (more reliable)
-	if match := regexp.MustCompile(`^[0-9]+_([0-9]+)_`).FindStringSubmatch(baseName); len(match) > 1 {
-		fileMessageID := match[1]
+	// Updated pattern to handle channel_id_message_id_rest format
+	if match := regexp.MustCompile(`^(\d+)_(\d+)_`).FindStringSubmatch(baseName); len(match) > 2 {
+		fileChannelID := match[1]
+		fileMessageID := match[2]
 
-		for _, message := range export.Messages {
-			if strconv.FormatInt(message.ID, 10) == fileMessageID {
-				metadata.MessageID = strconv.FormatInt(message.ID, 10)
-				metadata.MessageContent = message.Raw.Message
-				if message.Date > 0 {
-					dateTime := time.Unix(message.Date, 0)
-					metadata.DatePosted = &dateTime
+		// Verify channel ID matches if present
+		if strconv.FormatInt(export.ID, 10) == fileChannelID {
+			for _, message := range export.Messages {
+				if strconv.FormatInt(message.ID, 10) == fileMessageID {
+					metadata.MessageID = strconv.FormatInt(message.ID, 10)
+					metadata.MessageContent = message.Raw.Message
+					if message.Date > 0 {
+						dateTime := time.Unix(message.Date, 0)
+						metadata.DatePosted = &dateTime
+					}
+					return metadata, nil
 				}
-				return metadata, nil
 			}
 		}
 	}
@@ -68,6 +73,19 @@ func (e *DefaultExtractor) ExtractFromExport(export *ChannelExport, filename str
 	// Fallback to exact filename match
 	for _, message := range export.Messages {
 		if message.File == baseName {
+			metadata.MessageID = strconv.FormatInt(message.ID, 10)
+			metadata.MessageContent = message.Raw.Message
+			if message.Date > 0 {
+				dateTime := time.Unix(message.Date, 0)
+				metadata.DatePosted = &dateTime
+			}
+			return metadata, nil
+		}
+	}
+
+	// Additional fallback: check if baseName contains the original file name
+	for _, message := range export.Messages {
+		if message.File != "" && strings.Contains(baseName, strings.TrimSuffix(message.File, filepath.Ext(message.File))) {
 			metadata.MessageID = strconv.FormatInt(message.ID, 10)
 			metadata.MessageContent = message.Raw.Message
 			if message.Date > 0 {

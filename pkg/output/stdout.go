@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gnomegl/ulp/pkg/credential"
-	"github.com/gnomegl/ulp/pkg/freshness"
 )
 
 type StdoutWriter struct {
@@ -85,18 +84,7 @@ func (w *StdoutWriter) writeCSV(credentials []credential.Credential, opts Writer
 func (w *StdoutWriter) writeJSONL(credentials []credential.Credential, stats credential.ProcessingStats, opts WriterOptions) error {
 	encoder := json.NewEncoder(w.writer)
 
-	var freshnessScore *freshness.Score
-	if opts.EnableFreshness {
-		calculator := freshness.NewDefaultCalculator()
-		score := calculator.Calculate(
-			stats.TotalLines,
-			stats.ValidCredentials,
-			stats.DuplicatesFound,
-			nil,
-			0,
-		)
-		freshnessScore = score
-	}
+	// Freshness calculation removed - not included in metadata anymore
 
 	for _, cred := range credentials {
 		docID := generateDocID(cred.Username, cred.URL, cred.Password)
@@ -113,19 +101,10 @@ func (w *StdoutWriter) writeJSONL(credentials []credential.Credential, stats cre
 
 		metadata := Metadata{
 			OriginalFilename: opts.OutputBaseName,
-			Freshness:        freshnessScore,
 		}
 
-		if opts.TelegramMetadata != nil {
-			metadata.TelegramChannelID = opts.TelegramMetadata.ChannelID
-			metadata.TelegramChannelName = opts.TelegramMetadata.ChannelName
-			metadata.TelegramChannelAt = opts.TelegramMetadata.ChannelAt
-			metadata.MessageContent = opts.TelegramMetadata.MessageContent
-			metadata.MessageID = opts.TelegramMetadata.MessageID
-			if opts.TelegramMetadata.DatePosted != nil {
-				metadata.DatePosted = opts.TelegramMetadata.DatePosted.Format(time.RFC3339)
-				doc.Date = metadata.DatePosted
-			}
+		if opts.TelegramMetadata != nil && opts.TelegramMetadata.DatePosted != nil {
+			metadata.DatePosted = opts.TelegramMetadata.DatePosted.Format(time.RFC3339)
 		}
 
 		output := map[string]interface{}{
@@ -138,9 +117,6 @@ func (w *StdoutWriter) writeJSONL(credentials []credential.Credential, stats cre
 
 		if doc.Channel != "" {
 			output["channel"] = doc.Channel
-		}
-		if doc.Date != "" {
-			output["date"] = doc.Date
 		}
 
 		if err := encoder.Encode(output); err != nil {

@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/gnomegl/ulp/pkg/credential"
-	"github.com/gnomegl/ulp/pkg/freshness"
 )
 
 type Document struct {
@@ -12,18 +11,11 @@ type Document struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	URL      string `json:"url"`
-	Date     string `json:"date,omitempty"`
 }
 
 type Metadata struct {
-	OriginalFilename    string           `json:"original_filename"`
-	TelegramChannelID   string           `json:"telegram_channel_id,omitempty"`
-	TelegramChannelName string           `json:"telegram_channel_name,omitempty"`
-	TelegramChannelAt   string           `json:"telegram_channel_at,omitempty"`
-	DatePosted          string           `json:"date_posted,omitempty"`
-	MessageContent      string           `json:"message_content,omitempty"`
-	MessageID           string           `json:"message_id,omitempty"`
-	Freshness           *freshness.Score `json:"freshness,omitempty"`
+	OriginalFilename string `json:"original_filename"`
+	DatePosted       string `json:"date_posted,omitempty"`
 }
 
 type TelegramMetadata struct {

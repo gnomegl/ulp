@@ -38,7 +38,7 @@ func runDedupe(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	processor := credential.NewDefaultProcessor()
+	processor := credential.NewConcurrentProcessor(workers)
 	opts := CreateProcessingOptions(
 		true,
 		dedupeCmdFlags.DupesFile != "",

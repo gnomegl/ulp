@@ -64,7 +64,7 @@ func runTxt(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	processor := credential.NewDefaultProcessor()
+	processor := credential.NewConcurrentProcessor(workers)
 
 	if fileutil.IsDirectory(inputPath) {
 		if txtGlob {

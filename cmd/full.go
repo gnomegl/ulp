@@ -59,7 +59,7 @@ func runFull(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	processor := credential.NewDefaultProcessor()
+	processor := credential.NewConcurrentProcessor(workers)
 	opts := CreateProcessingOptions(true, false, "")
 
 	if fileutil.IsDirectory(inputPath) {
