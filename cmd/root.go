@@ -20,7 +20,7 @@ var rootCmd = &cobra.Command{
 - Processes Telegram channel metadata when available
 - Handles various input formats (URL:user:pass, domain:user:pass, etc.)
 - Calculates freshness scores based on duplicate percentage and other factors`,
-	Version: "2.0.0",
+	Version: "2.0.1",
 }
 
 func Execute() error {
