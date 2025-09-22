@@ -259,10 +259,8 @@ func processToStdout(inputPath, format string) error {
 			}
 
 			// Write results immediately
-			writerOpts := output.WriterOptions{
-				OutputBaseName:  GetOutputBaseName(path),
-				EnableFreshness: false,
-			}
+			telegramMeta := ExtractTelegramMetadata(jsonFile, path, channelName, channelAt)
+			writerOpts := CreateWriterOptions(GetOutputBaseName(path), telegramMeta, false, true)
 
 			if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 				return fmt.Errorf("failed to write to stdout: %w", err)
@@ -285,10 +283,8 @@ func processToStdout(inputPath, format string) error {
 			return fmt.Errorf("failed to process file: %w", err)
 		}
 
-		writerOpts := output.WriterOptions{
-			OutputBaseName:  GetOutputBaseName(inputPath),
-			EnableFreshness: false,
-		}
+		telegramMeta := ExtractTelegramMetadata(jsonFile, inputPath, channelName, channelAt)
+		writerOpts := CreateWriterOptions(GetOutputBaseName(inputPath), telegramMeta, false, true)
 
 		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 			return fmt.Errorf("failed to write to stdout: %w", err)
