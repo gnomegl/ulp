@@ -48,8 +48,6 @@ func (e *DefaultExtractor) ExtractFromExport(export *ChannelExport, filename str
 		metadata.Name = match[1]
 	}
 
-	// Try to find matching message by message ID in filename first (more reliable)
-	// Updated pattern to handle channel_id_message_id_rest format
 	if match := regexp.MustCompile(`^(\d+)_(\d+)_`).FindStringSubmatch(baseName); len(match) > 2 {
 		fileChannelID := match[1]
 		fileMessageID := match[2]

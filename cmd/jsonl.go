@@ -43,7 +43,6 @@ func runJSONL(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// If stdout is enabled, process differently
 	if jsonlStdout {
 		return processToStdout(inputPath, "jsonl")
 	}

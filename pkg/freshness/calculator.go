@@ -80,7 +80,6 @@ func (c *DefaultCalculator) calculateAgePenalty(fileDate time.Time) float64 {
 		return 0.0
 	}
 
-	// Linear penalty after threshold
 	penalty := (ageDays - penaltyThreshold) / (365 - penaltyThreshold) * maxPenalty
 
 	if penalty > maxPenalty {

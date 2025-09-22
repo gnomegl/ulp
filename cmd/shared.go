@@ -224,23 +224,19 @@ func processToStdout(inputPath, format string) error {
 	processor := credential.NewConcurrentProcessor(workers)
 	opts := CreateProcessingOptions(true, false, "")
 
-	// Create stdout writer once
 	writer := output.NewStdoutWriter(format)
 
 	if fileutil.IsDirectory(inputPath) {
-		// Walk through directory and process each file immediately
 		err := filepath.Walk(inputPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: error accessing path %s: %v\n", path, err)
 				return nil // Continue walking
 			}
 
-			// Skip directories
 			if info.IsDir() {
 				return nil
 			}
 
-			// Skip binary files
 			isBinary, err := fileutil.IsBinaryFile(path)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to check if file is binary %s: %v\n", path, err)
@@ -251,14 +247,12 @@ func processToStdout(inputPath, format string) error {
 				return nil // Continue walking
 			}
 
-			// Process the file
 			result, err := processor.ProcessFile(path, opts)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to process file %s: %v\n", path, err)
 				return nil // Continue walking
 			}
 
-			// Write results immediately
 			telegramMeta := ExtractTelegramMetadata(jsonFile, path, channelName, channelAt)
 			writerOpts := CreateWriterOptions(GetOutputBaseName(path), telegramMeta, false, true)
 
@@ -266,7 +260,6 @@ func processToStdout(inputPath, format string) error {
 				return fmt.Errorf("failed to write to stdout: %w", err)
 			}
 
-			// Flush after each file to output immediately
 			if err := writer.Flush(); err != nil {
 				return fmt.Errorf("failed to flush stdout: %w", err)
 			}

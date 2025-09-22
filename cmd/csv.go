@@ -48,7 +48,6 @@ func runCSV(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// If stdout is enabled, process differently
 	if csvStdout {
 		return processToStdout(inputPath, "csv")
 	}
