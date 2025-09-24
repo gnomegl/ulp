@@ -50,7 +50,6 @@ func runTxt(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// If stdout is enabled, process differently
 	if txtStdout {
 		return processToStdout(inputPath, "txt")
 	}

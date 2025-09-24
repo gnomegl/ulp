@@ -138,7 +138,7 @@ func (p *ConcurrentProcessor) processFileSequential(file *os.File, filename stri
 		stats.TotalLines++
 		lineCount++
 
-		if lineCount%1000 == 0 {
+		if lineCount%1000 == 0 && !opts.Quiet {
 			fmt.Fprintf(os.Stderr, ".")
 		}
 
@@ -192,7 +192,9 @@ func (p *ConcurrentProcessor) processFileConcurrent(file *os.File, filename stri
 	}
 
 	totalLines := len(lines)
-	fmt.Fprintf(os.Stderr, "Processing %d lines with %d workers...\n", totalLines, p.workers)
+	if !opts.Quiet {
+		fmt.Fprintf(os.Stderr, "Processing %d lines with %d workers...\n", totalLines, p.workers)
+	}
 
 	lineChan := make(chan struct {
 		lineNum int
@@ -226,7 +228,7 @@ func (p *ConcurrentProcessor) processFileConcurrent(file *os.File, filename stri
 		for result := range resultChan {
 			results[result.lineNum] = result
 			processedCount++
-			if processedCount%1000 == 0 {
+			if processedCount%1000 == 0 && !opts.Quiet {
 				fmt.Fprintf(os.Stderr, ".")
 			}
 		}
@@ -278,7 +280,9 @@ func (p *ConcurrentProcessor) processFileConcurrent(file *os.File, filename stri
 		stats.ValidCredentials++
 	}
 
-	fmt.Fprintf(os.Stderr, "\n")
+	if !opts.Quiet {
+		fmt.Fprintf(os.Stderr, "\n")
+	}
 
 	if opts.SaveDuplicates && opts.DuplicatesFile != "" && len(duplicates) > 0 {
 		if err := saveDuplicatesToFile(opts.DuplicatesFile, duplicates); err != nil {
@@ -309,7 +313,9 @@ func (p *ConcurrentProcessor) ProcessDirectory(dirname string, opts ProcessingOp
 	}
 
 	totalFiles := len(files)
-	fmt.Fprintf(os.Stderr, "Found %d files to process in %s\n", totalFiles, dirname)
+	if !opts.Quiet {
+		fmt.Fprintf(os.Stderr, "Found %d files to process in %s\n", totalFiles, dirname)
+	}
 
 	jobChan := make(chan fileJob, p.workers)
 	resultChan := make(chan struct {
@@ -349,8 +355,10 @@ func (p *ConcurrentProcessor) ProcessDirectory(dirname string, opts ProcessingOp
 				}
 
 				current := atomic.LoadInt32(&processedFiles)
-				fmt.Fprintf(os.Stderr, "[%d/%d] Worker %d: Processing: %s",
-					current+1, totalFiles, workerID, filepath.Base(job.path))
+				if !opts.Quiet {
+					fmt.Fprintf(os.Stderr, "[%d/%d] Worker %d: Processing: %s",
+						current+1, totalFiles, workerID, filepath.Base(job.path))
+				}
 
 				result, err := p.ProcessFile(job.path, opts)
 				if err != nil {
@@ -366,7 +374,9 @@ func (p *ConcurrentProcessor) ProcessDirectory(dirname string, opts ProcessingOp
 				}
 
 				atomic.AddInt32(&processedFiles, 1)
-				fmt.Fprintf(os.Stderr, " - Done (%d credentials found)\n", len(result.Credentials))
+				if !opts.Quiet {
+					fmt.Fprintf(os.Stderr, " - Done (%d credentials found)\n", len(result.Credentials))
+				}
 				resultChan <- struct {
 					path   string
 					result *ProcessingResult
@@ -398,8 +408,10 @@ func (p *ConcurrentProcessor) ProcessDirectory(dirname string, opts ProcessingOp
 	close(resultChan)
 	resultWg.Wait()
 
-	fmt.Fprintf(os.Stderr, "\nDirectory processing complete: %d files processed, %d skipped\n",
-		int(processedFiles)-int(skippedFiles), int(skippedFiles))
+	if !opts.Quiet {
+		fmt.Fprintf(os.Stderr, "\nDirectory processing complete: %d files processed, %d skipped\n",
+			int(processedFiles)-int(skippedFiles), int(skippedFiles))
+	}
 
 	return results, nil
 }

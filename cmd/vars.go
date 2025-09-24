@@ -7,6 +7,7 @@ var (
 	outputDir   string
 	noFreshness bool
 	split       bool
+	quiet       bool
 
 	dupesFile string
 	workers   int

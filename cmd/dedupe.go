@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/gnomegl/ulp/internal/command"
 	"github.com/gnomegl/ulp/internal/flags"
 	"github.com/gnomegl/ulp/pkg/credential"
@@ -63,10 +60,10 @@ func runDedupe(cmd *cobra.Command, args []string) error {
 			PrintCompletionStatus(outputPath)
 			if opts.SaveDuplicates && opts.DuplicatesFile != "" {
 				result, _ := processor.ProcessFile(inputPath, opts)
-				fmt.Fprintf(os.Stderr, "Duplicate lines saved to: %s\n", opts.DuplicatesFile)
-				fmt.Fprintf(os.Stderr, "Total duplicates removed: %d\n", len(result.Duplicates))
+				PrintQuiet("Duplicate lines saved to: %s\n", opts.DuplicatesFile)
+				PrintQuiet("Total duplicates removed: %d\n", len(result.Duplicates))
 			} else {
-				fmt.Fprintf(os.Stderr, "Duplicates removed (use --dupes-file to save duplicates to a file)\n")
+				PrintQuiet("Duplicates removed (use --dupes-file to save duplicates to a file)\n")
 			}
 			PrintIgnoredLinesWarning()
 		}

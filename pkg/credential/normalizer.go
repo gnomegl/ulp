@@ -26,7 +26,6 @@ func (n *DefaultURLNormalizer) Normalize(rawURL string) string {
 		return ""
 	}
 
-	// Clean up Telegram emoji garbage and corrupted Unicode
 	normalized := cleanTelegramGarbage(rawURL)
 
 	normalized = strings.ReplaceAll(normalized, "|", ":")
@@ -35,7 +34,6 @@ func (n *DefaultURLNormalizer) Normalize(rawURL string) string {
 	normalized = strings.ReplaceAll(normalized, "\n", "")
 	normalized = strings.TrimSpace(normalized)
 
-	// Handle different URL formats
 	if strings.HasPrefix(normalized, "android://") {
 		if idx := strings.Index(normalized, "/:"); idx != -1 && idx > len("android://") {
 			// Found the /: separator, everything before it is the URL
@@ -64,7 +62,6 @@ func (n *DefaultURLNormalizer) Normalize(rawURL string) string {
 		}
 	}
 
-	// For domain:user:pass format, ensure it's properly formatted
 	parts := strings.Split(normalized, ":")
 	if len(parts) >= 3 {
 		// Check if first part looks like a domain with optional path

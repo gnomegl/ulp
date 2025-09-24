@@ -32,6 +32,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.ulp.yaml)")
 	rootCmd.PersistentFlags().IntVarP(&workers, "workers", "w", 0, "Number of worker threads (default: number of CPU cores)")
+	rootCmd.PersistentFlags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress indicators and non-essential output")
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 

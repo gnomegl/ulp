@@ -46,7 +46,6 @@ func runFull(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// If stdout is enabled, process differently
 	if fullStdout {
 		return processToStdout(inputPath, outputFormat)
 	}
@@ -55,7 +54,7 @@ func runFull(cmd *cobra.Command, args []string) error {
 		extractor := telegram.NewDefaultExtractor()
 		if autoJSON, err := extractor.AutoDetectJSONFile(inputPath); err == nil {
 			jsonFile = autoJSON
-			fmt.Fprintf(os.Stderr, "Auto-detected JSON file: %s\n", autoJSON)
+			PrintQuiet("Auto-detected JSON file: %s\n", autoJSON)
 		}
 	}
 
@@ -70,7 +69,7 @@ func runFull(cmd *cobra.Command, args []string) error {
 }
 
 func processFileFull(processor credential.CredentialProcessor, inputPath string, opts credential.ProcessingOptions) error {
-	fmt.Fprintf(os.Stderr, "Processing file: %s\n", inputPath)
+	PrintQuiet("Processing file: %s\n", inputPath)
 
 	result, err := processor.ProcessFile(inputPath, opts)
 	if err != nil {
@@ -110,7 +109,7 @@ func processFileFull(processor credential.CredentialProcessor, inputPath string,
 }
 
 func processDirectoryFull(processor credential.CredentialProcessor, inputPath string, opts credential.ProcessingOptions) error {
-	fmt.Fprintf(os.Stderr, "Processing directory: %s\n", inputPath)
+	PrintQuiet("Processing directory: %s\n", inputPath)
 
 	results, err := processor.ProcessDirectory(inputPath, opts)
 	if err != nil {
@@ -151,7 +150,7 @@ func processDirectoryFull(processor credential.CredentialProcessor, inputPath st
 			outputFiles, err = writeCSVOutput(result, fileOutputDir, writerOpts)
 		case "jsonl":
 			outputFiles, err = writeNDJSONOutput(result, fileOutputDir, writerOpts)
-		default: // txt is default
+		default:
 			outputFiles, err = writeTextOutput(result, fileOutputDir, writerOpts)
 		}
 
@@ -164,15 +163,15 @@ func processDirectoryFull(processor credential.CredentialProcessor, inputPath st
 		totalCredentials += len(result.Credentials)
 		totalDuplicates += len(result.Duplicates)
 
-		fmt.Fprintf(os.Stderr, "Processed %s -> %s\n", filePath, outputFiles[0])
+		PrintQuiet("Processed %s -> %s\n", filePath, outputFiles[0])
 	}
 
-	fmt.Fprintf(os.Stderr, "\nDirectory processing completed:\n")
-	fmt.Fprintf(os.Stderr, "  Files processed: %d\n", totalFiles)
-	fmt.Fprintf(os.Stderr, "  Total credentials: %d\n", totalCredentials)
-	fmt.Fprintf(os.Stderr, "  Total duplicates removed: %d\n", totalDuplicates)
-	fmt.Fprintf(os.Stderr, "  Output format: %s\n", outputFormat)
-	fmt.Fprintf(os.Stderr, "  Output directory: %s\n", effectiveOutputDir)
+	PrintQuiet("\nDirectory processing completed:\n")
+	PrintQuiet("  Files processed: %d\n", totalFiles)
+	PrintQuiet("  Total credentials: %d\n", totalCredentials)
+	PrintQuiet("  Total duplicates removed: %d\n", totalDuplicates)
+	PrintQuiet("  Output format: %s\n", outputFormat)
+	PrintQuiet("  Output directory: %s\n", effectiveOutputDir)
 
 	return nil
 }
@@ -237,23 +236,23 @@ func writeNDJSONOutput(result *credential.ProcessingResult, outputDir string, wr
 }
 
 func printStatistics(result *credential.ProcessingResult, outputFiles []string, format string) {
-	fmt.Fprintf(os.Stderr, "\nProcessing completed:\n")
-	fmt.Fprintf(os.Stderr, "  Total credentials: %d\n", len(result.Credentials))
-	fmt.Fprintf(os.Stderr, "  Duplicates removed: %d\n", len(result.Duplicates))
-	fmt.Fprintf(os.Stderr, "  Output format: %s\n", format)
+	PrintQuiet("\nProcessing completed:\n")
+	PrintQuiet("  Total credentials: %d\n", len(result.Credentials))
+	PrintQuiet("  Duplicates removed: %d\n", len(result.Duplicates))
+	PrintQuiet("  Output format: %s\n", format)
 
 	if len(outputFiles) == 1 {
-		fmt.Fprintf(os.Stderr, "  Output file: %s\n", outputFiles[0])
+		PrintQuiet("  Output file: %s\n", outputFiles[0])
 	} else {
-		fmt.Fprintf(os.Stderr, "  Output files: %d files created\n", len(outputFiles))
+		PrintQuiet("  Output files: %d files created\n", len(outputFiles))
 		for i, file := range outputFiles {
-			fmt.Fprintf(os.Stderr, "    [%d] %s\n", i+1, file)
+			PrintQuiet("    [%d] %s\n", i+1, file)
 		}
 	}
 
 	if noFreshness {
-		fmt.Fprintf(os.Stderr, "  Freshness scoring: disabled\n")
+		PrintQuiet("  Freshness scoring: disabled\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "  Freshness scoring: enabled\n")
+		PrintQuiet("  Freshness scoring: enabled\n")
 	}
 }

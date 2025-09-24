@@ -17,6 +17,7 @@ type ProcessingOptions struct {
 	EnableDeduplication bool
 	SaveDuplicates      bool
 	DuplicatesFile      string
+	Quiet               bool
 }
 
 type ProcessingResult struct {

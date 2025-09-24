@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/gnomegl/ulp/internal/flags"
@@ -103,14 +102,14 @@ func processFileCSV(processor credential.CredentialProcessor, inputPath, outputP
 		return fmt.Errorf("failed to write CSV: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Created CSV file: %s\n", csvFilename)
-	fmt.Fprintf(os.Stderr, "Total credentials: %d\n", len(result.Credentials))
+	PrintQuiet("Created CSV file: %s\n", csvFilename)
+	PrintQuiet("Total credentials: %d\n", len(result.Credentials))
 
 	return nil
 }
 
 func processDirectoryCSV(processor credential.CredentialProcessor, inputPath, outputPath string) error {
-	fmt.Fprintf(os.Stderr, "Processing directory: %s\n", inputPath)
+	PrintQuiet("Processing directory: %s\n", inputPath)
 
 	opts := CreateProcessingOptions(false, false, "")
 
@@ -144,18 +143,18 @@ func processDirectoryCSV(processor credential.CredentialProcessor, inputPath, ou
 		}
 
 		writer.Close()
-		fmt.Fprintf(os.Stderr, "Created CSV file: %s\n", csvFilename)
+		PrintQuiet("Created CSV file: %s\n", csvFilename)
 		totalCreds += len(result.Credentials)
 	}
 
-	fmt.Fprintf(os.Stderr, "Total files processed: %d\n", len(results))
-	fmt.Fprintf(os.Stderr, "Total credentials: %d\n", totalCreds)
+	PrintQuiet("Total files processed: %d\n", len(results))
+	PrintQuiet("Total credentials: %d\n", totalCreds)
 
 	return nil
 }
 
 func processDirectoryGlobCSV(processor credential.CredentialProcessor, inputPath, outputPath string) error {
-	fmt.Fprintf(os.Stderr, "Processing directory with glob: %s\n", inputPath)
+	PrintQuiet("Processing directory with glob: %s\n", inputPath)
 
 	dirName := filepath.Base(inputPath)
 	csvFilename := filepath.Join(outputPath, dirName+"_combined.csv")
@@ -197,12 +196,12 @@ func processDirectoryGlobCSV(processor credential.CredentialProcessor, inputPath
 
 		totalCreds += len(result.Credentials)
 		filesProcessed++
-		fmt.Fprintf(os.Stderr, "Processed: %s (%d credentials)\n", filePath, len(result.Credentials))
+		PrintQuiet("Processed: %s (%d credentials)\n", filePath, len(result.Credentials))
 	}
 
-	fmt.Fprintf(os.Stderr, "Created combined CSV file: %s\n", csvFilename)
-	fmt.Fprintf(os.Stderr, "Total files processed: %d\n", filesProcessed)
-	fmt.Fprintf(os.Stderr, "Total credentials: %d\n", totalCreds)
+	PrintQuiet("Created combined CSV file: %s\n", csvFilename)
+	PrintQuiet("Total files processed: %d\n", filesProcessed)
+	PrintQuiet("Total credentials: %d\n", totalCreds)
 
 	return nil
 }

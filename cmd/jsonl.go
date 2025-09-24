@@ -53,7 +53,7 @@ func runJSONL(cmd *cobra.Command, args []string) error {
 		possibleJSON := filepath.Join(dir, strings.TrimSuffix(base, filepath.Ext(base))+".json")
 		if fileutil.FileExists(possibleJSON) {
 			jsonlCmdFlags.JsonFile = possibleJSON
-			fmt.Fprintf(os.Stderr, "Auto-detected JSON file: %s\n", possibleJSON)
+			PrintQuiet("Auto-detected JSON file: %s\n", possibleJSON)
 		}
 	}
 
@@ -68,7 +68,7 @@ func runJSONL(cmd *cobra.Command, args []string) error {
 }
 
 func processFileJSONL(processor credential.CredentialProcessor, inputPath string, opts credential.ProcessingOptions) error {
-	fmt.Fprintf(os.Stderr, "Processing file: %s\n", inputPath)
+	PrintQuiet("Processing file: %s\n", inputPath)
 
 	result, err := processor.ProcessFile(inputPath, opts)
 	if err != nil {
@@ -107,29 +107,29 @@ func processFileJSONL(processor credential.CredentialProcessor, inputPath string
 	}
 
 	if !jsonlCmdFlags.Split {
-		fmt.Fprintf(os.Stderr, "NDJSON file created: %s.jsonl\n", outputBaseName)
+		PrintQuiet("NDJSON file created: %s.jsonl\n", outputBaseName)
 	} else {
-		fmt.Fprintf(os.Stderr, "NDJSON files created with base name: %s_*.jsonl\n", outputBaseName)
+		PrintQuiet("NDJSON files created with base name: %s_*.jsonl\n", outputBaseName)
 	}
 
 	return nil
 }
 
 func processDirectoryJSONL(processor credential.CredentialProcessor, inputPath string, opts credential.ProcessingOptions) error {
-	fmt.Fprintf(os.Stderr, "\n=== Processing directory: %s ===\n", inputPath)
+	PrintQuiet("\n=== Processing directory: %s ===\n", inputPath)
 
 	results, err := processor.ProcessDirectory(inputPath, opts)
 	if err != nil {
 		return fmt.Errorf("failed to process directory: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "\n=== Writing JSONL files ===\n")
+	PrintQuiet("\n=== Writing JSONL files ===\n")
 	fileCount := 0
 	totalCount := len(results)
 
 	for filePath, result := range results {
 		fileCount++
-		fmt.Fprintf(os.Stderr, "[%d/%d] Writing JSONL for: %s", fileCount, totalCount, filepath.Base(filePath))
+		PrintQuiet("[%d/%d] Writing JSONL for: %s", fileCount, totalCount, filepath.Base(filePath))
 
 		telegramMeta := ExtractTelegramMetadata(
 			jsonlCmdFlags.JsonFile,
@@ -167,10 +167,10 @@ func processDirectoryJSONL(processor credential.CredentialProcessor, inputPath s
 		}
 
 		writer.Close()
-		fmt.Fprintf(os.Stderr, " - Done\n")
+		PrintQuiet(" - Done\n")
 	}
 
-	fmt.Fprintf(os.Stderr, "\n=== Processing completed ===\n")
+	PrintQuiet("\n=== Processing completed ===\n")
 	fmt.Fprintf(os.Stderr, "Successfully processed %d files from: %s\n", totalCount, inputPath)
 	if !jsonlCmdFlags.Split {
 		fmt.Fprintf(os.Stderr, "NDJSON files created with _ms.jsonl suffix for each processed file\n")

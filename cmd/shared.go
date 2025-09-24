@@ -12,6 +12,13 @@ import (
 	"github.com/gnomegl/ulp/pkg/telegram"
 )
 
+// PrintQuiet prints to stderr only if quiet mode is not enabled
+func PrintQuiet(format string, args ...interface{}) {
+	if !quiet {
+		fmt.Fprintf(os.Stderr, format, args...)
+	}
+}
+
 type CommonProcessor struct {
 	InputPath  string
 	OutputPath string
@@ -118,19 +125,19 @@ func CreateWriterOptions(baseName string, telegramMeta *output.TelegramMetadata,
 }
 
 func PrintDirectoryWarning() {
-	fmt.Fprintf(os.Stderr, "Warning: --dupes-file option ignored when processing directories (individual dupes files created per input file)\n")
+	PrintQuiet("Warning: --dupes-file option ignored when processing directories (individual dupes files created per input file)\n")
 }
 
 func PrintProcessingStatus(inputPath, outputPath string) {
-	fmt.Fprintf(os.Stderr, "Processing: %s -> %s\n", inputPath, outputPath)
+	PrintQuiet("Processing: %s -> %s\n", inputPath, outputPath)
 }
 
 func PrintCompletionStatus(outputPath string) {
-	fmt.Fprintf(os.Stderr, "Completed: %s\n", outputPath)
+	PrintQuiet("Completed: %s\n", outputPath)
 }
 
 func PrintIgnoredLinesWarning() {
-	fmt.Fprintf(os.Stderr, "Lines not matching the expected format were ignored\n")
+	PrintQuiet("Lines not matching the expected format were ignored\n")
 }
 
 func GetOutputBaseName(inputPath string) string {
@@ -217,6 +224,7 @@ func CreateProcessingOptions(enableDedup, saveDupes bool, dupesFile string) cred
 		EnableDeduplication: enableDedup,
 		SaveDuplicates:      saveDupes,
 		DuplicatesFile:      dupesFile,
+		Quiet:               quiet,
 	}
 }
 

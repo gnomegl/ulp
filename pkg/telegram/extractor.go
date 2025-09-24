@@ -24,7 +24,6 @@ func (e *DefaultExtractor) ExtractFromFile(jsonFile string, filename string) (*C
 		return nil, fmt.Errorf("failed to read JSON file: %w", err)
 	}
 
-	// Try to fix common JSON issues (like Infinity values)
 	dataStr := string(data)
 	dataStr = strings.ReplaceAll(dataStr, "Infinity", "null")
 
@@ -41,7 +40,6 @@ func (e *DefaultExtractor) ExtractFromExport(export *ChannelExport, filename str
 		ID: strconv.FormatInt(export.ID, 10),
 	}
 
-	// Extract channel name and @ handle from filename if available
 	baseName := filepath.Base(filename)
 	if match := regexp.MustCompile(`@([^-]+)`).FindStringSubmatch(baseName); len(match) > 1 {
 		metadata.At = "@" + match[1]
@@ -52,7 +50,6 @@ func (e *DefaultExtractor) ExtractFromExport(export *ChannelExport, filename str
 		fileChannelID := match[1]
 		fileMessageID := match[2]
 
-		// Verify channel ID matches if present
 		if strconv.FormatInt(export.ID, 10) == fileChannelID {
 			for _, message := range export.Messages {
 				if strconv.FormatInt(message.ID, 10) == fileMessageID {
@@ -68,7 +65,6 @@ func (e *DefaultExtractor) ExtractFromExport(export *ChannelExport, filename str
 		}
 	}
 
-	// Fallback to exact filename match
 	for _, message := range export.Messages {
 		if message.File == baseName {
 			metadata.MessageID = strconv.FormatInt(message.ID, 10)
@@ -81,7 +77,6 @@ func (e *DefaultExtractor) ExtractFromExport(export *ChannelExport, filename str
 		}
 	}
 
-	// Additional fallback: check if baseName contains the original file name
 	for _, message := range export.Messages {
 		if message.File != "" && strings.Contains(baseName, strings.TrimSuffix(message.File, filepath.Ext(message.File))) {
 			metadata.MessageID = strconv.FormatInt(message.ID, 10)
