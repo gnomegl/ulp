@@ -81,6 +81,22 @@ func (w *StdoutWriter) writeCSV(credentials []credential.Credential, opts Writer
 	return csvWriter.Error()
 }
 
+func (w *StdoutWriter) writeCSVBatch(credentials []credential.Credential) error {
+	csvWriter := csv.NewWriter(w.writer)
+
+	for _, cred := range credentials {
+		docID := generateDocID(cred.Username, cred.URL, cred.Password)
+		record := []string{docID, "", cred.Username, cred.Password, cred.URL, ""}
+
+		if err := csvWriter.Write(record); err != nil {
+			return err
+		}
+	}
+
+	csvWriter.Flush()
+	return csvWriter.Error()
+}
+
 func (w *StdoutWriter) writeJSONL(credentials []credential.Credential, stats credential.ProcessingStats, opts WriterOptions) error {
 	encoder := json.NewEncoder(w.writer)
 
@@ -133,4 +149,34 @@ func (w *StdoutWriter) Flush() error {
 
 func (w *StdoutWriter) Close() error {
 	return w.writer.Flush()
+}
+
+// StdoutBatchWriter implements the BatchWriter interface for streaming output
+type StdoutBatchWriter struct {
+	writer *StdoutWriter
+}
+
+func NewStdoutBatchWriter(format string) *StdoutBatchWriter {
+	return &StdoutBatchWriter{
+		writer: NewStdoutWriter(format),
+	}
+}
+
+func (b *StdoutBatchWriter) WriteBatch(credentials []credential.Credential) error {
+	// For CSV format, we need to avoid writing headers for each batch
+	if b.writer.format == "csv" {
+		return b.writer.writeCSVBatch(credentials)
+	}
+	// For other formats, use the regular WriteCredentials method
+	stats := credential.ProcessingStats{}
+	opts := WriterOptions{}
+	return b.writer.WriteCredentials(credentials, stats, opts)
+}
+
+func (b *StdoutBatchWriter) Flush() error {
+	return b.writer.Flush()
+}
+
+func (b *StdoutBatchWriter) Close() error {
+	return b.writer.Close()
 }

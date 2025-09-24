@@ -124,6 +124,38 @@ func (p *ConcurrentProcessor) ProcessFile(filename string, opts ProcessingOption
 	return p.processFileConcurrent(file, filename, opts)
 }
 
+func (p *ConcurrentProcessor) ProcessFileStreaming(filename string, opts ProcessingOptions, batchWriter BatchWriter) (*ProcessingStats, error) {
+	isBinary, err := fileutil.IsBinaryFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if file is binary %s: %w", filename, err)
+	}
+	if isBinary {
+		return nil, fmt.Errorf("file %s appears to be a binary file, skipping", filename)
+	}
+
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %s: %w", filename, err)
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat file %s: %w", filename, err)
+	}
+
+	batchSize := opts.BatchSize
+	if batchSize <= 0 {
+		batchSize = 10000 // Default batch size
+	}
+
+	if fileInfo.Size() < 1*1024*1024 && p.workers <= 1 {
+		return p.processFileSequentialStreaming(file, filename, opts, batchWriter, batchSize)
+	}
+
+	return p.processFileConcurrentStreaming(file, filename, opts, batchWriter, batchSize)
+}
+
 func (p *ConcurrentProcessor) processFileSequential(file *os.File, filename string, opts ProcessingOptions) (*ProcessingResult, error) {
 	var credentials []Credential
 	var duplicates []string
@@ -295,6 +327,197 @@ func (p *ConcurrentProcessor) processFileConcurrent(file *os.File, filename stri
 		Stats:       stats,
 		Duplicates:  duplicates,
 	}, nil
+}
+
+func (p *ConcurrentProcessor) processFileSequentialStreaming(file *os.File, filename string, opts ProcessingOptions, batchWriter BatchWriter, batchSize int) (*ProcessingStats, error) {
+	stats := ProcessingStats{}
+	seenHashes := make(map[string]bool)
+	var duplicates []string
+
+	scanner := bufio.NewScanner(file)
+	lineCount := 0
+	var currentBatch []Credential
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		stats.TotalLines++
+		lineCount++
+
+		if lineCount%1000 == 0 && !opts.Quiet {
+			fmt.Fprintf(os.Stderr, ".")
+		}
+
+		cred, err := p.ProcessLine(line)
+		if err != nil {
+			stats.LinesIgnored++
+			continue
+		}
+
+		if opts.EnableDeduplication {
+			credKey := fmt.Sprintf("%s:%s:%s", cred.URL, cred.Username, cred.Password)
+			if seenHashes[credKey] {
+				stats.DuplicatesFound++
+				if opts.SaveDuplicates {
+					duplicates = append(duplicates, line)
+				}
+				continue
+			}
+			seenHashes[credKey] = true
+		}
+
+		currentBatch = append(currentBatch, *cred)
+		stats.ValidCredentials++
+
+		if len(currentBatch) >= batchSize {
+			if err := batchWriter.WriteBatch(currentBatch); err != nil {
+				return nil, fmt.Errorf("failed to write batch: %w", err)
+			}
+			currentBatch = currentBatch[:0]
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading file %s: %w", filename, err)
+	}
+
+	if len(currentBatch) > 0 {
+		if err := batchWriter.WriteBatch(currentBatch); err != nil {
+			return nil, fmt.Errorf("failed to write final batch: %w", err)
+		}
+	}
+
+	if opts.SaveDuplicates && opts.DuplicatesFile != "" && len(duplicates) > 0 {
+		if err := saveDuplicatesToFile(opts.DuplicatesFile, duplicates); err != nil {
+			return nil, fmt.Errorf("failed to save duplicates: %w", err)
+		}
+	}
+
+	return &stats, nil
+}
+
+func (p *ConcurrentProcessor) processFileConcurrentStreaming(file *os.File, filename string, opts ProcessingOptions, batchWriter BatchWriter, batchSize int) (*ProcessingStats, error) {
+	scanner := bufio.NewScanner(file)
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading file %s: %w", filename, err)
+	}
+
+	totalLines := len(lines)
+	if !opts.Quiet {
+		fmt.Fprintf(os.Stderr, "Processing %d lines with %d workers...\n", totalLines, p.workers)
+	}
+
+	lineChan := make(chan struct {
+		lineNum int
+		line    string
+	}, 100)
+	resultChan := make(chan lineResult, 100)
+
+	var wg sync.WaitGroup
+	for i := 0; i < p.workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for work := range lineChan {
+				cred, err := p.ProcessLine(work.line)
+				resultChan <- lineResult{
+					lineNum:    work.lineNum,
+					credential: cred,
+					original:   work.line,
+					err:        err,
+				}
+			}
+		}()
+	}
+
+	results := make([]lineResult, totalLines)
+	var resultWg sync.WaitGroup
+	resultWg.Add(1)
+	go func() {
+		defer resultWg.Done()
+		processedCount := 0
+		for result := range resultChan {
+			results[result.lineNum] = result
+			processedCount++
+			if processedCount%1000 == 0 && !opts.Quiet {
+				fmt.Fprintf(os.Stderr, ".")
+			}
+		}
+	}()
+
+	for i, line := range lines {
+		lineChan <- struct {
+			lineNum int
+			line    string
+		}{lineNum: i, line: line}
+	}
+	close(lineChan)
+
+	wg.Wait()
+	close(resultChan)
+	resultWg.Wait()
+
+	stats := ProcessingStats{TotalLines: totalLines}
+	seenHashes := make(map[string]bool)
+	var duplicates []string
+	var currentBatch []Credential
+
+	for _, result := range results {
+		if result.err != nil {
+			stats.LinesIgnored++
+			continue
+		}
+
+		if result.credential == nil {
+			continue
+		}
+
+		if opts.EnableDeduplication {
+			credKey := fmt.Sprintf("%s:%s:%s",
+				result.credential.URL,
+				result.credential.Username,
+				result.credential.Password)
+			if seenHashes[credKey] {
+				stats.DuplicatesFound++
+				if opts.SaveDuplicates {
+					duplicates = append(duplicates, result.original)
+				}
+				continue
+			}
+			seenHashes[credKey] = true
+		}
+
+		currentBatch = append(currentBatch, *result.credential)
+		stats.ValidCredentials++
+
+		if len(currentBatch) >= batchSize {
+			if err := batchWriter.WriteBatch(currentBatch); err != nil {
+				return nil, fmt.Errorf("failed to write batch: %w", err)
+			}
+			currentBatch = currentBatch[:0]
+		}
+	}
+
+	if !opts.Quiet {
+		fmt.Fprintf(os.Stderr, "\n")
+	}
+
+	if len(currentBatch) > 0 {
+		if err := batchWriter.WriteBatch(currentBatch); err != nil {
+			return nil, fmt.Errorf("failed to write final batch: %w", err)
+		}
+	}
+
+	if opts.SaveDuplicates && opts.DuplicatesFile != "" && len(duplicates) > 0 {
+		if err := saveDuplicatesToFile(opts.DuplicatesFile, duplicates); err != nil {
+			return nil, fmt.Errorf("failed to save duplicates: %w", err)
+		}
+	}
+
+	return &stats, nil
 }
 
 func (p *ConcurrentProcessor) ProcessDirectory(dirname string, opts ProcessingOptions) (map[string]*ProcessingResult, error) {

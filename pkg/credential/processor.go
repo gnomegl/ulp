@@ -153,6 +153,100 @@ func (p *DefaultProcessor) ProcessFile(filename string, opts ProcessingOptions) 
 	}, nil
 }
 
+func (p *DefaultProcessor) ProcessFileStreaming(filename string, opts ProcessingOptions, batchWriter BatchWriter) (*ProcessingStats, error) {
+	isBinary, err := fileutil.IsBinaryFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check if file is binary %s: %w", filename, err)
+	}
+	if isBinary {
+		return nil, fmt.Errorf("file %s appears to be a binary file, skipping", filename)
+	}
+
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file %s: %w", filename, err)
+	}
+	defer file.Close()
+
+	stats := ProcessingStats{}
+	var duplicates []string
+
+	if opts.EnableDeduplication {
+		p.seenHashes = make(map[string]bool)
+	}
+
+	scanner := bufio.NewScanner(file)
+	lineCount := 0
+	batchSize := opts.BatchSize
+	if batchSize <= 0 {
+		batchSize = 10000 // Default batch size
+	}
+
+	var currentBatch []Credential
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		stats.TotalLines++
+		lineCount++
+
+		if lineCount%1000 == 0 {
+			fmt.Fprintf(os.Stderr, ".")
+		}
+
+		cred, err := p.ProcessLine(line)
+		if err != nil {
+			stats.LinesIgnored++
+			continue
+		}
+
+		if opts.EnableDeduplication {
+			credKey := fmt.Sprintf("%s:%s:%s", cred.URL, cred.Username, cred.Password)
+			if p.seenHashes[credKey] {
+				stats.DuplicatesFound++
+				if opts.SaveDuplicates {
+					duplicates = append(duplicates, line)
+				}
+				continue
+			}
+			p.seenHashes[credKey] = true
+		}
+
+		currentBatch = append(currentBatch, *cred)
+		stats.ValidCredentials++
+
+		// Flush batch when it reaches the size limit
+		if len(currentBatch) >= batchSize {
+			if err := batchWriter.WriteBatch(currentBatch); err != nil {
+				return nil, fmt.Errorf("failed to write batch: %w", err)
+			}
+			currentBatch = currentBatch[:0] // Reset batch without deallocating underlying array
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading file %s: %w", filename, err)
+	}
+
+	// Flush remaining credentials in the final batch
+	if len(currentBatch) > 0 {
+		if err := batchWriter.WriteBatch(currentBatch); err != nil {
+			return nil, fmt.Errorf("failed to write final batch: %w", err)
+		}
+	}
+
+	if err := batchWriter.Flush(); err != nil {
+		return nil, fmt.Errorf("failed to flush batch writer: %w", err)
+	}
+
+	if opts.SaveDuplicates && opts.DuplicatesFile != "" && len(duplicates) > 0 {
+		if err := p.saveDuplicatesToFile(opts.DuplicatesFile, duplicates); err != nil {
+			return nil, fmt.Errorf("failed to save duplicates: %w", err)
+		}
+	}
+
+	return &stats, nil
+}
+
 func (p *DefaultProcessor) ProcessDirectory(dirname string, opts ProcessingOptions) (map[string]*ProcessingResult, error) {
 	results := make(map[string]*ProcessingResult)
 

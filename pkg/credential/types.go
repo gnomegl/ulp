@@ -18,6 +18,7 @@ type ProcessingOptions struct {
 	SaveDuplicates      bool
 	DuplicatesFile      string
 	Quiet               bool
+	BatchSize           int
 }
 
 type ProcessingResult struct {
@@ -34,4 +35,10 @@ type CredentialProcessor interface {
 	ProcessLine(line string) (*Credential, error)
 	ProcessFile(filename string, opts ProcessingOptions) (*ProcessingResult, error)
 	ProcessDirectory(dirname string, opts ProcessingOptions) (map[string]*ProcessingResult, error)
+	ProcessFileStreaming(filename string, opts ProcessingOptions, batchWriter BatchWriter) (*ProcessingStats, error)
+}
+
+type BatchWriter interface {
+	WriteBatch(credentials []Credential) error
+	Flush() error
 }

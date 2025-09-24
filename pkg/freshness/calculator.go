@@ -22,30 +22,23 @@ func NewCalculatorWithConfig(config *Config) *DefaultCalculator {
 }
 
 func (c *DefaultCalculator) Calculate(totalLines, validLines, duplicateLines int, fileDate *time.Time, fileSizeBytes int64) *Score {
-	// Calculate duplicate percentage
 	duplicatePercentage := 0.0
 	if totalLines > 0 {
 		duplicatePercentage = float64(duplicateLines) / float64(totalLines)
 	}
 
-	// Get base score from duplicate percentage
 	score := c.getBaseScoreFromDuplicates(duplicatePercentage)
 
-	// Apply size bonus for large files with very low duplicates
 	if validLines >= c.config.SizeBonusThreshold && duplicatePercentage <= c.config.SizeBonusMaxDuplicates {
 		score += c.config.SizeBonusAmount
 	}
 
-	// Apply age penalty if date is available
 	if fileDate != nil {
 		agePenalty := c.calculateAgePenalty(*fileDate)
 		score -= agePenalty
 	}
 
-	// Clamp score to valid range
 	score = math.Max(c.config.MinScore, math.Min(c.config.MaxScore, score))
-
-	// Round to 1 decimal place
 	score = math.Round(score*10) / 10
 
 	return &Score{

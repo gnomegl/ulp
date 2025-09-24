@@ -18,7 +18,6 @@ func NewDefaultExtractor() *DefaultExtractor {
 }
 
 func (e *DefaultExtractor) ExtractFromFile(jsonFile string, filename string) (*ChannelMetadata, error) {
-	// Read and parse JSON file
 	data, err := os.ReadFile(jsonFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read JSON file: %w", err)
@@ -89,7 +88,6 @@ func (e *DefaultExtractor) ExtractFromExport(export *ChannelExport, filename str
 		}
 	}
 
-	// Return metadata even if no message match found
 	return metadata, nil
 }
 
@@ -98,7 +96,6 @@ func (e *DefaultExtractor) AutoDetectJSONFile(inputPath string) (string, error) 
 		inputPath = strings.TrimSuffix(inputPath, "/")
 	}
 
-	// For directory input, look for matching JSON file
 	dirName := filepath.Base(inputPath)
 	parentDir := filepath.Dir(inputPath)
 	jsonFile := filepath.Join(parentDir, dirName+".json")

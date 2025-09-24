@@ -12,7 +12,6 @@ import (
 	"github.com/gnomegl/ulp/pkg/telegram"
 )
 
-// PrintQuiet prints to stderr only if quiet mode is not enabled
 func PrintQuiet(format string, args ...interface{}) {
 	if !quiet {
 		fmt.Fprintf(os.Stderr, format, args...)
@@ -231,65 +230,60 @@ func CreateProcessingOptions(enableDedup, saveDupes bool, dupesFile string) cred
 func processToStdout(inputPath, format string) error {
 	processor := credential.NewConcurrentProcessor(workers)
 	opts := CreateProcessingOptions(true, false, "")
+	opts.BatchSize = batchSize
 
-	writer := output.NewStdoutWriter(format)
-
-	if fileutil.IsDirectory(inputPath) {
-		err := filepath.Walk(inputPath, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: error accessing path %s: %v\n", path, err)
-				return nil // Continue walking
-			}
-
-			if info.IsDir() {
-				return nil
-			}
-
-			isBinary, err := fileutil.IsBinaryFile(path)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to check if file is binary %s: %v\n", path, err)
-				return nil // Continue walking
-			}
-			if isBinary {
-				fmt.Fprintf(os.Stderr, "Skipping binary file: %s\n", path)
-				return nil // Continue walking
-			}
-
-			result, err := processor.ProcessFile(path, opts)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to process file %s: %v\n", path, err)
-				return nil // Continue walking
-			}
-
-			telegramMeta := ExtractTelegramMetadata(jsonFile, path, channelName, channelAt)
-			writerOpts := CreateWriterOptions(GetOutputBaseName(path), telegramMeta, false, true)
-
-			if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
-				return fmt.Errorf("failed to write to stdout: %w", err)
-			}
-
-			if err := writer.Flush(); err != nil {
-				return fmt.Errorf("failed to flush stdout: %w", err)
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			return fmt.Errorf("failed to walk directory: %w", err)
-		}
-	} else {
-		result, err := processor.ProcessFile(inputPath, opts)
+	if !fileutil.IsDirectory(inputPath) {
+		batchWriter := output.NewStdoutBatchWriter(format)
+		_, err := processor.ProcessFileStreaming(inputPath, opts, batchWriter)
 		if err != nil {
 			return fmt.Errorf("failed to process file: %w", err)
 		}
+		return batchWriter.Close()
+	}
 
-		telegramMeta := ExtractTelegramMetadata(jsonFile, inputPath, channelName, channelAt)
-		writerOpts := CreateWriterOptions(GetOutputBaseName(inputPath), telegramMeta, false, true)
+	writer := output.NewStdoutWriter(format)
+	err := filepath.Walk(inputPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: error accessing path %s: %v\n", path, err)
+			return nil // Continue walking
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		isBinary, err := fileutil.IsBinaryFile(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to check if file is binary %s: %v\n", path, err)
+			return nil // Continue walking
+		}
+		if isBinary {
+			fmt.Fprintf(os.Stderr, "Skipping binary file: %s\n", path)
+			return nil // Continue walking
+		}
+
+		result, err := processor.ProcessFile(path, opts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to process file %s: %v\n", path, err)
+			return nil // Continue walking
+		}
+
+		telegramMeta := ExtractTelegramMetadata(jsonFile, path, channelName, channelAt)
+		writerOpts := CreateWriterOptions(GetOutputBaseName(path), telegramMeta, false, true)
 
 		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 			return fmt.Errorf("failed to write to stdout: %w", err)
 		}
+
+		if err := writer.Flush(); err != nil {
+			return fmt.Errorf("failed to flush stdout: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to walk directory: %w", err)
 	}
 
 	return writer.Close()

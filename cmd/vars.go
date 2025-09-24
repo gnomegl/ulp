@@ -11,4 +11,5 @@ var (
 
 	dupesFile string
 	workers   int
+	batchSize int
 )
