@@ -146,7 +146,7 @@ func (p *ConcurrentProcessor) ProcessFileStreaming(filename string, opts Process
 
 	batchSize := opts.BatchSize
 	if batchSize <= 0 {
-		batchSize = 10000 // Default batch size
+		batchSize = 10000
 	}
 
 	if fileInfo.Size() < 1*1024*1024 && p.workers <= 1 {

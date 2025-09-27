@@ -77,7 +77,6 @@ func GetRelativePath(basePath, fullPath string) string {
 	return relPath
 }
 
-// IsBinaryFile checks if a file is likely to be binary by examining the first 512 bytes
 func IsBinaryFile(path string) (bool, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -85,47 +84,37 @@ func IsBinaryFile(path string) (bool, error) {
 	}
 	defer file.Close()
 
-	// Read first 512 bytes (or less if file is smaller)
 	buffer := make([]byte, 512)
 	n, err := file.Read(buffer)
 	if err != nil && err != io.EOF {
 		return false, err
 	}
 
-	// Skip UTF-8 BOM if present (EF BB BF)
 	start := 0
 	if n >= 3 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF {
 		start = 3
 	}
 
-	// Check for null bytes (common indicator of binary files)
 	for i := start; i < n; i++ {
 		if buffer[i] == 0 {
 			return true, nil
 		}
 	}
 
-	// Count non-printable characters (excluding common whitespace)
 	nonPrintable := 0
 	totalChecked := 0
 	for i := start; i < n; i++ {
 		b := buffer[i]
 		totalChecked++
-		
-		// Allow common whitespace characters
+
 		if b < 32 && b != 9 && b != 10 && b != 13 {
 			nonPrintable++
 		}
-		// Characters above 127 are often part of valid UTF-8
-		// Only count them if they're not part of a valid UTF-8 sequence
 		if b > 127 {
-			// Simple check: if it's a UTF-8 continuation byte (10xxxxxx), skip it
 			if (b & 0xC0) != 0x80 {
-				// This could be the start of a UTF-8 sequence, check if it's valid
-				if (b & 0xE0) == 0xC0 || // 110xxxxx (2-byte sequence)
-				   (b & 0xF0) == 0xE0 || // 1110xxxx (3-byte sequence)
-				   (b & 0xF8) == 0xF0 {  // 11110xxx (4-byte sequence)
-					// Likely a valid UTF-8 start byte, don't count as non-printable
+				if (b&0xE0) == 0xC0 ||
+					(b&0xF0) == 0xE0 ||
+					(b&0xF8) == 0xF0 {
 				} else {
 					nonPrintable++
 				}
@@ -133,7 +122,6 @@ func IsBinaryFile(path string) (bool, error) {
 		}
 	}
 
-	// If more than 30% of characters are non-printable, consider it binary
 	if totalChecked > 0 && float64(nonPrintable)/float64(totalChecked) > 0.3 {
 		return true, nil
 	}
@@ -141,7 +129,6 @@ func IsBinaryFile(path string) (bool, error) {
 	return false, nil
 }
 
-// IsTextFile checks if a file is a text file (inverse of IsBinaryFile)
 func IsTextFile(path string) (bool, error) {
 	isBinary, err := IsBinaryFile(path)
 	if err != nil {

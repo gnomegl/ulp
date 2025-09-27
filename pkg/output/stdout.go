@@ -14,8 +14,9 @@ import (
 )
 
 type StdoutWriter struct {
-	format string
-	writer *bufio.Writer
+	format           string
+	writer           *bufio.Writer
+	telegramMetadata *TelegramMetadata
 }
 
 func NewStdoutWriter(format string) *StdoutWriter {
@@ -25,7 +26,14 @@ func NewStdoutWriter(format string) *StdoutWriter {
 	}
 }
 
-// generateDocID creates a hash from the cleaned username, url, and password
+func NewStdoutWriterWithMetadata(format string, telegramMeta *TelegramMetadata) *StdoutWriter {
+	return &StdoutWriter{
+		format:           format,
+		writer:           bufio.NewWriter(os.Stdout),
+		telegramMetadata: telegramMeta,
+	}
+}
+
 func generateDocID(username, url, password string) string {
 	data := fmt.Sprintf("%s:%s:%s", username, url, password)
 	hash := sha256.Sum256([]byte(data))
@@ -55,7 +63,6 @@ func (w *StdoutWriter) writeText(credentials []credential.Credential) error {
 func (w *StdoutWriter) writeCSV(credentials []credential.Credential, opts WriterOptions) error {
 	csvWriter := csv.NewWriter(w.writer)
 
-	// Write header with doc_id
 	header := []string{"doc_id", "channel", "username", "password", "url", "date"}
 	if err := csvWriter.Write(header); err != nil {
 		return err
@@ -99,8 +106,6 @@ func (w *StdoutWriter) writeCSVBatch(credentials []credential.Credential) error 
 
 func (w *StdoutWriter) writeJSONL(credentials []credential.Credential, stats credential.ProcessingStats, opts WriterOptions) error {
 	encoder := json.NewEncoder(w.writer)
-
-	// Freshness calculation removed - not included in metadata anymore
 
 	for _, cred := range credentials {
 		docID := generateDocID(cred.Username, cred.URL, cred.Password)
@@ -151,7 +156,6 @@ func (w *StdoutWriter) Close() error {
 	return w.writer.Flush()
 }
 
-// StdoutBatchWriter implements the BatchWriter interface for streaming output
 type StdoutBatchWriter struct {
 	writer *StdoutWriter
 }
@@ -162,14 +166,23 @@ func NewStdoutBatchWriter(format string) *StdoutBatchWriter {
 	}
 }
 
+func NewStdoutBatchWriterWithMetadata(format string, telegramMeta *TelegramMetadata) *StdoutBatchWriter {
+	writer := NewStdoutWriter(format)
+	writer.telegramMetadata = telegramMeta
+	return &StdoutBatchWriter{
+		writer: writer,
+	}
+}
+
 func (b *StdoutBatchWriter) WriteBatch(credentials []credential.Credential) error {
-	// For CSV format, we need to avoid writing headers for each batch
 	if b.writer.format == "csv" {
 		return b.writer.writeCSVBatch(credentials)
 	}
-	// For other formats, use the regular WriteCredentials method
 	stats := credential.ProcessingStats{}
 	opts := WriterOptions{}
+	if b.writer.telegramMetadata != nil {
+		opts.TelegramMetadata = b.writer.telegramMetadata
+	}
 	return b.writer.WriteCredentials(credentials, stats, opts)
 }
 

@@ -74,7 +74,6 @@ func (n *DefaultURLNormalizer) Normalize(rawURL string) string {
 	return normalized
 }
 
-// ExtractNormalizedDomain extracts the domain part for deduplication purposes
 func ExtractNormalizedDomain(url string) string {
 	domain := url
 

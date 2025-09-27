@@ -29,7 +29,6 @@ func NewTextWriter(filename string) (*TextWriter, error) {
 
 func (w *TextWriter) WriteCredentials(credentials []credential.Credential, stats credential.ProcessingStats, opts WriterOptions) error {
 	for _, cred := range credentials {
-		// Format: url:email:password
 		line := fmt.Sprintf("%s:%s:%s\n", cred.URL, cred.Username, cred.Password)
 		if _, err := w.writer.WriteString(line); err != nil {
 			return fmt.Errorf("failed to write text record: %w", err)

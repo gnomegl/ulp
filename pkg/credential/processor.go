@@ -214,7 +214,6 @@ func (p *DefaultProcessor) ProcessFileStreaming(filename string, opts Processing
 		currentBatch = append(currentBatch, *cred)
 		stats.ValidCredentials++
 
-		// Flush batch when it reaches the size limit
 		if len(currentBatch) >= batchSize {
 			if err := batchWriter.WriteBatch(currentBatch); err != nil {
 				return nil, fmt.Errorf("failed to write batch: %w", err)
@@ -227,7 +226,6 @@ func (p *DefaultProcessor) ProcessFileStreaming(filename string, opts Processing
 		return nil, fmt.Errorf("error reading file %s: %w", filename, err)
 	}
 
-	// Flush remaining credentials in the final batch
 	if len(currentBatch) > 0 {
 		if err := batchWriter.WriteBatch(currentBatch); err != nil {
 			return nil, fmt.Errorf("failed to write final batch: %w", err)

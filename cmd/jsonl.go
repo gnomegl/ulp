@@ -44,6 +44,22 @@ func runJSONL(cmd *cobra.Command, args []string) error {
 	}
 
 	if jsonlStdout {
+		// Sync flag values to global variables for stdout processing
+		jsonFile = jsonlCmdFlags.JsonFile
+		channelName = jsonlCmdFlags.ChannelName
+		channelAt = jsonlCmdFlags.ChannelAt
+
+		// Auto-detect JSON file if not provided and not a directory
+		if jsonFile == "" && !fileutil.IsDirectory(inputPath) {
+			dir := filepath.Dir(inputPath)
+			base := filepath.Base(inputPath)
+			possibleJSON := filepath.Join(dir, strings.TrimSuffix(base, filepath.Ext(base))+".json")
+			if fileutil.FileExists(possibleJSON) {
+				jsonFile = possibleJSON
+				PrintQuiet("Auto-detected JSON file: %s\n", possibleJSON)
+			}
+		}
+
 		return processToStdout(inputPath, "jsonl")
 	}
 

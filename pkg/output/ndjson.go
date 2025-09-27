@@ -12,7 +12,6 @@ import (
 	"github.com/gnomegl/ulp/pkg/credential"
 )
 
-// generateNDJSONDocID creates a hash from the cleaned username, url, and password
 func generateNDJSONDocID(username, url, password string) string {
 	data := fmt.Sprintf("%s:%s:%s", username, url, password)
 	hash := sha256.Sum256([]byte(data))
@@ -39,7 +38,6 @@ func NewNDJSONWriter(maxFileSize int64) *NDJSONWriter {
 }
 
 func (w *NDJSONWriter) WriteCredentials(credentials []credential.Credential, stats credential.ProcessingStats, opts WriterOptions) error {
-	// Initialize file manager
 	w.fileManager = &NDJSONFileManager{
 		baseName:    opts.OutputBaseName,
 		fileCounter: 1,
@@ -47,24 +45,18 @@ func (w *NDJSONWriter) WriteCredentials(credentials []credential.Credential, sta
 		noSplit:     opts.NoSplit,
 	}
 
-	// Create first file
 	if err := w.fileManager.CreateNewFile(); err != nil {
 		return fmt.Errorf("failed to create initial file: %w", err)
 	}
 
-	// Initialize writer
 	w.currentFile = w.fileManager.currentFile
 	w.currentWriter = bufio.NewWriter(w.currentFile)
 
-	// Write each credential as NDJSON
 	for _, cred := range credentials {
-		// Generate doc_id from cleaned credentials
 		docID := generateNDJSONDocID(cred.Username, cred.URL, cred.Password)
 
-		// Create document with metadata
 		doc := w.createDocument(cred, opts)
 
-		// Create output structure with doc_id
 		output := map[string]interface{}{
 			"doc_id":   docID,
 			"url":      doc.URL,
@@ -72,12 +64,10 @@ func (w *NDJSONWriter) WriteCredentials(credentials []credential.Credential, sta
 			"password": doc.Password,
 		}
 
-		// Add optional fields
 		if doc.Channel != "" {
 			output["channel"] = doc.Channel
 		}
 
-		// Add metadata - only include original_filename and date_posted
 		metadata := Metadata{
 			OriginalFilename: opts.OutputBaseName,
 		}

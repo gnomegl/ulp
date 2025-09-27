@@ -58,7 +58,6 @@ func (c *DefaultCalculator) getBaseScoreFromDuplicates(duplicatePercentage float
 			return threshold.Score
 		}
 	}
-	// If we get here, return the lowest score
 	return 1.0
 }
 

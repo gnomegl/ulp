@@ -15,7 +15,7 @@ type Message struct {
 }
 
 type RawData struct {
-	Message string `json:"Message,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type ChannelMetadata struct {

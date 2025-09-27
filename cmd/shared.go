@@ -12,7 +12,7 @@ import (
 	"github.com/gnomegl/ulp/pkg/telegram"
 )
 
-func PrintQuiet(format string, args ...interface{}) {
+func PrintQuiet(format string, args ...any) {
 	if !quiet {
 		fmt.Fprintf(os.Stderr, format, args...)
 	}
@@ -232,8 +232,18 @@ func processToStdout(inputPath, format string) error {
 	opts := CreateProcessingOptions(true, false, "")
 	opts.BatchSize = batchSize
 
+	// Auto-detect JSON file for directories if not provided
+	if jsonFile == "" && fileutil.IsDirectory(inputPath) {
+		extractor := telegram.NewDefaultExtractor()
+		if autoJSON, err := extractor.AutoDetectJSONFile(inputPath); err == nil {
+			jsonFile = autoJSON
+			PrintQuiet("Auto-detected JSON file: %s\n", autoJSON)
+		}
+	}
+
 	if !fileutil.IsDirectory(inputPath) {
-		batchWriter := output.NewStdoutBatchWriter(format)
+		telegramMeta := ExtractTelegramMetadata(jsonFile, inputPath, channelName, channelAt)
+		batchWriter := output.NewStdoutBatchWriterWithMetadata(format, telegramMeta)
 		_, err := processor.ProcessFileStreaming(inputPath, opts, batchWriter)
 		if err != nil {
 			return fmt.Errorf("failed to process file: %w", err)
