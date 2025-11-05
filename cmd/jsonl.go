@@ -111,8 +111,9 @@ func processFileJSONL(processor credential.CredentialProcessor, inputPath string
 		outputBaseName = filepath.Join(jsonlCmdFlags.OutputDir, filepath.Base(outputBaseName))
 	}
 
-	writerOpts := CreateWriterOptions(
+	writerOpts := CreateWriterOptionsWithInput(
 		outputBaseName,
+		filepath.Base(inputPath),
 		telegramMeta,
 		!jsonlCmdFlags.NoFreshness,
 		!jsonlCmdFlags.Split,
@@ -170,8 +171,9 @@ func processDirectoryJSONL(processor credential.CredentialProcessor, inputPath s
 
 		writer := output.NewNDJSONWriter(100 * 1024 * 1024)
 
-		writerOpts := CreateWriterOptions(
+		writerOpts := CreateWriterOptionsWithInput(
 			outputBaseName,
+			filepath.Base(filePath),
 			telegramMeta,
 			!jsonlCmdFlags.NoFreshness,
 			!jsonlCmdFlags.Split,

@@ -45,10 +45,15 @@ func (e *DefaultExtractor) ExtractFromExport(export *ChannelExport, filename str
 		metadata.Name = match[1]
 	}
 
-	if match := regexp.MustCompile(`^(\d+)_(\d+)_`).FindStringSubmatch(baseName); len(match) > 2 {
+	// Handle tdl naming convention: channelid_messageid_actualfilename
+	// Try to strip the prefix and match against the actual filename
+	cleanedBaseName := baseName
+	if match := regexp.MustCompile(`^(\d+)_(\d+)_(.+)$`).FindStringSubmatch(baseName); len(match) > 3 {
 		fileChannelID := match[1]
 		fileMessageID := match[2]
+		cleanedBaseName = match[3] // The actual filename without the tdl prefix
 
+		// First try to match by message ID if channel ID matches
 		if strconv.FormatInt(export.ID, 10) == fileChannelID {
 			for _, message := range export.Messages {
 				if strconv.FormatInt(message.ID, 10) == fileMessageID {
@@ -62,8 +67,22 @@ func (e *DefaultExtractor) ExtractFromExport(export *ChannelExport, filename str
 				}
 			}
 		}
+
+		// If no match by message ID, try matching by the cleaned filename
+		for _, message := range export.Messages {
+			if message.File == cleanedBaseName {
+				metadata.MessageID = strconv.FormatInt(message.ID, 10)
+				metadata.MessageContent = message.Raw.Message
+				if message.Date > 0 {
+					dateTime := time.Unix(message.Date, 0)
+					metadata.DatePosted = &dateTime
+				}
+				return metadata, nil
+			}
+		}
 	}
 
+	// Try exact match with original basename
 	for _, message := range export.Messages {
 		if message.File == baseName {
 			metadata.MessageID = strconv.FormatInt(message.ID, 10)
@@ -76,6 +95,7 @@ func (e *DefaultExtractor) ExtractFromExport(export *ChannelExport, filename str
 		}
 	}
 
+	// Try partial match
 	for _, message := range export.Messages {
 		if message.File != "" && strings.Contains(baseName, strings.TrimSuffix(message.File, filepath.Ext(message.File))) {
 			metadata.MessageID = strconv.FormatInt(message.ID, 10)

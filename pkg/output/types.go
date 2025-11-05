@@ -30,6 +30,7 @@ type TelegramMetadata struct {
 type WriterOptions struct {
 	MaxFileSize      int64
 	OutputBaseName   string
+	InputFilename    string
 	TelegramMetadata *TelegramMetadata
 	EnableFreshness  bool
 	NoSplit          bool

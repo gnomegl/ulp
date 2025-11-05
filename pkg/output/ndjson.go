@@ -69,7 +69,7 @@ func (w *NDJSONWriter) WriteCredentials(credentials []credential.Credential, sta
 		}
 
 		metadata := Metadata{
-			OriginalFilename: opts.OutputBaseName,
+			OriginalFilename: opts.InputFilename,
 		}
 
 		if opts.TelegramMetadata != nil && opts.TelegramMetadata.DatePosted != nil {

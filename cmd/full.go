@@ -88,7 +88,7 @@ func processFileFull(processor credential.CredentialProcessor, inputPath string,
 		return err
 	}
 
-	writerOpts := CreateWriterOptions(outputBaseName, telegramMeta, !noFreshness, !split)
+	writerOpts := CreateWriterOptionsWithInput(outputBaseName, filepath.Base(inputPath), telegramMeta, !noFreshness, !split)
 
 	var outputFiles []string
 	switch outputFormat {
@@ -142,7 +142,7 @@ func processDirectoryFull(processor credential.CredentialProcessor, inputPath st
 
 		outputBaseName := GetOutputBaseName(filePath)
 
-		writerOpts := CreateWriterOptions(outputBaseName, telegramMeta, !noFreshness, !split)
+		writerOpts := CreateWriterOptionsWithInput(outputBaseName, filepath.Base(inputPath), telegramMeta, !noFreshness, !split)
 
 		var outputFiles []string
 		switch outputFormat {

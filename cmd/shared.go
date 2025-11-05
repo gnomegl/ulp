@@ -114,9 +114,14 @@ func EnsureOutputDirectory(outputPath string) error {
 }
 
 func CreateWriterOptions(baseName string, telegramMeta *output.TelegramMetadata, enableFreshness, noSplit bool) output.WriterOptions {
+	return CreateWriterOptionsWithInput(baseName, "", telegramMeta, enableFreshness, noSplit)
+}
+
+func CreateWriterOptionsWithInput(baseName, inputFilename string, telegramMeta *output.TelegramMetadata, enableFreshness, noSplit bool) output.WriterOptions {
 	return output.WriterOptions{
 		MaxFileSize:      100 * 1024 * 1024,
 		OutputBaseName:   baseName,
+		InputFilename:    inputFilename,
 		TelegramMetadata: telegramMeta,
 		EnableFreshness:  enableFreshness,
 		NoSplit:          noSplit,
