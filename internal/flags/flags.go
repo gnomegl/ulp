@@ -11,6 +11,7 @@ type CommonFlags struct {
 	NoFreshness bool
 	DupesFile   string
 	NoDedupe    bool
+	SimpleDocID bool
 }
 
 func AddTelegramFlags(cmd *cobra.Command, flags *CommonFlags) {
@@ -23,6 +24,7 @@ func AddOutputFlags(cmd *cobra.Command, flags *CommonFlags) {
 	cmd.Flags().StringVarP(&flags.OutputDir, "output-dir", "o", "", "Output directory for generated files")
 	cmd.Flags().BoolVarP(&flags.Split, "split", "s", false, "Split output files at 100MB")
 	cmd.Flags().BoolVar(&flags.NoFreshness, "no-freshness", false, "Disable freshness scoring")
+	cmd.Flags().BoolVar(&flags.SimpleDocID, "simple-doc-id", false, "Use simple doc_id generation (hash of username:password only)")
 }
 
 func AddDedupeFlags(cmd *cobra.Command, flags *CommonFlags) {

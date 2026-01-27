@@ -12,8 +12,13 @@ import (
 	"github.com/gnomegl/ulp/pkg/credential"
 )
 
-func generateNDJSONDocID(username, url, password string) string {
-	data := fmt.Sprintf("%s:%s:%s", username, url, password)
+func generateNDJSONDocID(username, url, password string, simple bool) string {
+	var data string
+	if simple {
+		data = fmt.Sprintf("%s:%s", username, password)
+	} else {
+		data = fmt.Sprintf("%s:%s:%s", username, url, password)
+	}
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
 }
@@ -53,7 +58,7 @@ func (w *NDJSONWriter) WriteCredentials(credentials []credential.Credential, sta
 	w.currentWriter = bufio.NewWriter(w.currentFile)
 
 	for _, cred := range credentials {
-		docID := generateNDJSONDocID(cred.Username, cred.URL, cred.Password)
+		docID := generateNDJSONDocID(cred.Username, cred.URL, cred.Password, opts.SimpleDocID)
 
 		doc := w.createDocument(cred, opts)
 

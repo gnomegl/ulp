@@ -11,8 +11,13 @@ import (
 	"github.com/gnomegl/ulp/pkg/credential"
 )
 
-func generateCSVDocID(username, url, password string) string {
-	data := fmt.Sprintf("%s:%s:%s", username, url, password)
+func generateCSVDocID(username, url, password string, simple bool) string {
+	var data string
+	if simple {
+		data = fmt.Sprintf("%s:%s", username, password)
+	} else {
+		data = fmt.Sprintf("%s:%s:%s", username, url, password)
+	}
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
 }
@@ -55,7 +60,7 @@ func (w *CSVWriter) WriteCredentials(credentials []credential.Credential, stats 
 }
 
 func (w *CSVWriter) createRecord(cred credential.Credential, opts WriterOptions) []string {
-	docID := generateCSVDocID(cred.Username, cred.URL, cred.Password)
+	docID := generateCSVDocID(cred.Username, cred.URL, cred.Password, opts.SimpleDocID)
 
 	record := []string{docID, "", cred.Username, cred.Password, cred.URL, ""}
 

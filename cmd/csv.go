@@ -96,7 +96,7 @@ func processFileCSV(processor credential.CredentialProcessor, inputPath, outputP
 		return fmt.Errorf("failed to create CSV writer: %w", err)
 	}
 	defer writer.Close()
-	writerOpts := CreateWriterOptions(baseName, telegramMeta, false, true)
+	writerOpts := CreateWriterOptions(baseName, telegramMeta, false, true, csvCmdFlags.SimpleDocID)
 
 	if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 		return fmt.Errorf("failed to write CSV: %w", err)
@@ -135,7 +135,7 @@ func processDirectoryCSV(processor credential.CredentialProcessor, inputPath, ou
 			return fmt.Errorf("failed to create CSV writer for %s: %w", filePath, err)
 		}
 
-		writerOpts := CreateWriterOptions(baseName, telegramMeta, false, true)
+		writerOpts := CreateWriterOptions(baseName, telegramMeta, false, true, csvCmdFlags.SimpleDocID)
 
 		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 			writer.Close()
@@ -188,6 +188,7 @@ func processDirectoryGlobCSV(processor credential.CredentialProcessor, inputPath
 			telegramMeta,
 			false,
 			true,
+			csvCmdFlags.SimpleDocID,
 		)
 
 		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {

@@ -113,11 +113,11 @@ func EnsureOutputDirectory(outputPath string) error {
 	return nil
 }
 
-func CreateWriterOptions(baseName string, telegramMeta *output.TelegramMetadata, enableFreshness, noSplit bool) output.WriterOptions {
-	return CreateWriterOptionsWithInput(baseName, "", telegramMeta, enableFreshness, noSplit)
+func CreateWriterOptions(baseName string, telegramMeta *output.TelegramMetadata, enableFreshness, noSplit, simpleDocID bool) output.WriterOptions {
+	return CreateWriterOptionsWithInput(baseName, "", telegramMeta, enableFreshness, noSplit, simpleDocID)
 }
 
-func CreateWriterOptionsWithInput(baseName, inputFilename string, telegramMeta *output.TelegramMetadata, enableFreshness, noSplit bool) output.WriterOptions {
+func CreateWriterOptionsWithInput(baseName, inputFilename string, telegramMeta *output.TelegramMetadata, enableFreshness, noSplit, simpleDocID bool) output.WriterOptions {
 	return output.WriterOptions{
 		MaxFileSize:      100 * 1024 * 1024,
 		OutputBaseName:   baseName,
@@ -125,6 +125,7 @@ func CreateWriterOptionsWithInput(baseName, inputFilename string, telegramMeta *
 		TelegramMetadata: telegramMeta,
 		EnableFreshness:  enableFreshness,
 		NoSplit:          noSplit,
+		SimpleDocID:      simpleDocID,
 	}
 }
 
@@ -249,6 +250,7 @@ func processToStdout(inputPath, format string) error {
 	if !fileutil.IsDirectory(inputPath) {
 		telegramMeta := ExtractTelegramMetadata(jsonFile, inputPath, channelName, channelAt)
 		batchWriter := output.NewStdoutBatchWriterWithMetadata(format, telegramMeta)
+		batchWriter.SetSimpleDocID(simpleDocID)
 		_, err := processor.ProcessFileStreaming(inputPath, opts, batchWriter)
 		if err != nil {
 			return fmt.Errorf("failed to process file: %w", err)
@@ -284,7 +286,7 @@ func processToStdout(inputPath, format string) error {
 		}
 
 		telegramMeta := ExtractTelegramMetadata(jsonFile, path, channelName, channelAt)
-		writerOpts := CreateWriterOptions(GetOutputBaseName(path), telegramMeta, false, true)
+		writerOpts := CreateWriterOptions(GetOutputBaseName(path), telegramMeta, false, true, simpleDocID)
 
 		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 			return fmt.Errorf("failed to write to stdout: %w", err)

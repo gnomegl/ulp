@@ -34,6 +34,7 @@ type WriterOptions struct {
 	TelegramMetadata *TelegramMetadata
 	EnableFreshness  bool
 	NoSplit          bool
+	SimpleDocID      bool
 }
 
 type Writer interface {

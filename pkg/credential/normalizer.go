@@ -5,6 +5,16 @@ import (
 	"strings"
 )
 
+var (
+	reTelegramGarbage1 = regexp.MustCompile(`[À-Ã]+[¢Â]+|[Â¢]+[À-Ã]+|[ÀÁÂÃâ¢§¹°]+`)
+	reTelegramGarbage2 = regexp.MustCompile(`[\x00-\x1F\x7F-\x9F]`)
+	reTelegramGarbage3 = regexp.MustCompile(`[\x{1F000}-\x{1FFFF}]|[\x{2600}-\x{27BF}]|[\x{FE00}-\x{FE0F}]|[\x{1F900}-\x{1F9FF}]`)
+	reTelegramGarbage4 = regexp.MustCompile(`[\x{0080}-\x{00BF}]{2,}`)
+	reWhitespace       = regexp.MustCompile(`\s+`)
+	reProtocol         = regexp.MustCompile(`^https?://(www\.)?([^/:]+)(.*?):`)
+	reWww              = regexp.MustCompile(`^www\.([^/:]+)(.*?):`)
+)
+
 type DefaultURLNormalizer struct{}
 
 func NewDefaultURLNormalizer() *DefaultURLNormalizer {
@@ -12,11 +22,11 @@ func NewDefaultURLNormalizer() *DefaultURLNormalizer {
 }
 
 func cleanTelegramGarbage(input string) string {
-	result := regexp.MustCompile(`[À-Ã]+[¢Â]+|[Â¢]+[À-Ã]+|[ÀÁÂÃâ¢§¹°]+`).ReplaceAllString(input, "")
-	result = regexp.MustCompile(`[\x00-\x1F\x7F-\x9F]`).ReplaceAllString(result, "")
-	result = regexp.MustCompile(`[\x{1F000}-\x{1FFFF}]|[\x{2600}-\x{27BF}]|[\x{FE00}-\x{FE0F}]|[\x{1F900}-\x{1F9FF}]`).ReplaceAllString(result, "")
-	result = regexp.MustCompile(`[\x{0080}-\x{00BF}]{2,}`).ReplaceAllString(result, "")
-	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
+	result := reTelegramGarbage1.ReplaceAllString(input, "")
+	result = reTelegramGarbage2.ReplaceAllString(result, "")
+	result = reTelegramGarbage3.ReplaceAllString(result, "")
+	result = reTelegramGarbage4.ReplaceAllString(result, "")
+	result = reWhitespace.ReplaceAllString(result, " ")
 
 	return strings.TrimSpace(result)
 }
@@ -42,8 +52,7 @@ func (n *DefaultURLNormalizer) Normalize(rawURL string) string {
 		return normalized
 	} else if strings.HasPrefix(normalized, "https://") || strings.HasPrefix(normalized, "http://") {
 		// Remove protocol and www prefix, keep path
-		re := regexp.MustCompile(`^https?://(www\.)?([^/:]+)(.*?):`)
-		matches := re.FindStringSubmatch(normalized)
+		matches := reProtocol.FindStringSubmatch(normalized)
 		if len(matches) >= 4 {
 			domain := matches[2]
 			path := matches[3]
@@ -52,8 +61,7 @@ func (n *DefaultURLNormalizer) Normalize(rawURL string) string {
 		}
 	} else if strings.HasPrefix(normalized, "www.") {
 		// Remove www prefix, keep path
-		re := regexp.MustCompile(`^www\.([^/:]+)(.*?):`)
-		matches := re.FindStringSubmatch(normalized)
+		matches := reWww.FindStringSubmatch(normalized)
 		if len(matches) >= 3 {
 			domain := matches[1]
 			path := matches[2]

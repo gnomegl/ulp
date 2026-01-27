@@ -117,6 +117,7 @@ func processFileJSONL(processor credential.CredentialProcessor, inputPath string
 		telegramMeta,
 		!jsonlCmdFlags.NoFreshness,
 		!jsonlCmdFlags.Split,
+		jsonlCmdFlags.SimpleDocID,
 	)
 
 	if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
@@ -177,6 +178,7 @@ func processDirectoryJSONL(processor credential.CredentialProcessor, inputPath s
 			telegramMeta,
 			!jsonlCmdFlags.NoFreshness,
 			!jsonlCmdFlags.Split,
+			jsonlCmdFlags.SimpleDocID,
 		)
 
 		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {

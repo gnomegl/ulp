@@ -17,6 +17,7 @@ type StdoutWriter struct {
 	format           string
 	writer           *bufio.Writer
 	telegramMetadata *TelegramMetadata
+	SimpleDocID      bool
 }
 
 func NewStdoutWriter(format string) *StdoutWriter {
@@ -34,8 +35,13 @@ func NewStdoutWriterWithMetadata(format string, telegramMeta *TelegramMetadata) 
 	}
 }
 
-func generateDocID(username, url, password string) string {
-	data := fmt.Sprintf("%s:%s:%s", username, url, password)
+func generateDocID(username, url, password string, simple bool) string {
+	var data string
+	if simple {
+		data = fmt.Sprintf("%s:%s", username, password)
+	} else {
+		data = fmt.Sprintf("%s:%s:%s", username, url, password)
+	}
 	hash := sha256.Sum256([]byte(data))
 	return hex.EncodeToString(hash[:])
 }
@@ -69,7 +75,7 @@ func (w *StdoutWriter) writeCSV(credentials []credential.Credential, opts Writer
 	}
 
 	for _, cred := range credentials {
-		docID := generateDocID(cred.Username, cred.URL, cred.Password)
+		docID := generateDocID(cred.Username, cred.URL, cred.Password, opts.SimpleDocID)
 		record := []string{docID, "", cred.Username, cred.Password, cred.URL, ""}
 
 		if opts.TelegramMetadata != nil {
@@ -92,7 +98,7 @@ func (w *StdoutWriter) writeCSVBatch(credentials []credential.Credential) error 
 	csvWriter := csv.NewWriter(w.writer)
 
 	for _, cred := range credentials {
-		docID := generateDocID(cred.Username, cred.URL, cred.Password)
+		docID := generateDocID(cred.Username, cred.URL, cred.Password, w.SimpleDocID)
 		record := []string{docID, "", cred.Username, cred.Password, cred.URL, ""}
 
 		if err := csvWriter.Write(record); err != nil {
@@ -108,7 +114,7 @@ func (w *StdoutWriter) writeJSONL(credentials []credential.Credential, stats cre
 	encoder := json.NewEncoder(w.writer)
 
 	for _, cred := range credentials {
-		docID := generateDocID(cred.Username, cred.URL, cred.Password)
+		docID := generateDocID(cred.Username, cred.URL, cred.Password, opts.SimpleDocID)
 
 		doc := Document{
 			URL:      cred.URL,
@@ -183,6 +189,7 @@ func (b *StdoutBatchWriter) WriteBatch(credentials []credential.Credential) erro
 	if b.writer.telegramMetadata != nil {
 		opts.TelegramMetadata = b.writer.telegramMetadata
 	}
+	opts.SimpleDocID = b.writer.SimpleDocID
 	return b.writer.WriteCredentials(credentials, stats, opts)
 }
 
@@ -192,4 +199,8 @@ func (b *StdoutBatchWriter) Flush() error {
 
 func (b *StdoutBatchWriter) Close() error {
 	return b.writer.Close()
+}
+
+func (b *StdoutBatchWriter) SetSimpleDocID(simple bool) {
+	b.writer.SimpleDocID = simple
 }

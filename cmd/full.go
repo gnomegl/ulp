@@ -36,6 +36,7 @@ func init() {
 	fullCmd.Flags().StringVarP(&outputDir, "output-dir", "o", "", "Output directory for files (defaults to input file's directory)")
 	fullCmd.Flags().StringVarP(&outputFormat, "format", "f", "txt", "Output format: txt, jsonl, or csv (default: txt)")
 	fullCmd.Flags().BoolVar(&fullStdout, "stdout", false, "Output to stdout instead of file")
+	fullCmd.Flags().BoolVar(&simpleDocID, "simple-doc-id", false, "Use simple doc_id generation (hash of username:password only)")
 	rootCmd.AddCommand(fullCmd)
 }
 
@@ -88,7 +89,7 @@ func processFileFull(processor credential.CredentialProcessor, inputPath string,
 		return err
 	}
 
-	writerOpts := CreateWriterOptionsWithInput(outputBaseName, filepath.Base(inputPath), telegramMeta, !noFreshness, !split)
+	writerOpts := CreateWriterOptionsWithInput(outputBaseName, filepath.Base(inputPath), telegramMeta, !noFreshness, !split, simpleDocID)
 
 	var outputFiles []string
 	switch outputFormat {
@@ -142,7 +143,7 @@ func processDirectoryFull(processor credential.CredentialProcessor, inputPath st
 
 		outputBaseName := GetOutputBaseName(filePath)
 
-		writerOpts := CreateWriterOptionsWithInput(outputBaseName, filepath.Base(inputPath), telegramMeta, !noFreshness, !split)
+		writerOpts := CreateWriterOptionsWithInput(outputBaseName, filepath.Base(inputPath), telegramMeta, !noFreshness, !split, simpleDocID)
 
 		var outputFiles []string
 		switch outputFormat {

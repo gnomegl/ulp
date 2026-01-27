@@ -99,7 +99,7 @@ func processFileTxt(processor credential.CredentialProcessor, inputPath, outputP
 		return fmt.Errorf("failed to create text writer: %w", err)
 	}
 	defer writer.Close()
-	writerOpts := CreateWriterOptions(baseName, telegramMeta, false, true)
+	writerOpts := CreateWriterOptions(baseName, telegramMeta, false, true, false)
 
 	if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 		return fmt.Errorf("failed to write text: %w", err)
@@ -138,7 +138,7 @@ func processDirectoryTxt(processor credential.CredentialProcessor, inputPath, ou
 			return fmt.Errorf("failed to create text writer for %s: %w", filePath, err)
 		}
 
-		writerOpts := CreateWriterOptions(baseName, telegramMeta, false, true)
+		writerOpts := CreateWriterOptions(baseName, telegramMeta, false, true, false)
 
 		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
 			writer.Close()
@@ -191,6 +191,7 @@ func processDirectoryGlobTxt(processor credential.CredentialProcessor, inputPath
 			telegramMeta,
 			false,
 			true,
+			false,
 		)
 
 		if err := writer.WriteCredentials(result.Credentials, result.Stats, writerOpts); err != nil {
